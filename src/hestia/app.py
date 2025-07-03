@@ -17,4 +17,4 @@ def index():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, port=int(os.environ.get("PORT", 6173)), host="0.0.0.0")
+    uvicorn.run(app, port=int(os.environ.get("PORT", 7777)), host="0.0.0.0")
