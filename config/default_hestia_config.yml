@@ -1,0 +1,28 @@
+app:
+  task_runner_api_url: "http://localhost:8080/run"
+  task_runner_api_key: "your-secret-key"
+  janitor_interval_seconds: 600
+
+services:
+  - name: "ollama_service"
+    strategy: "strategies/ollama_router.py"
+    hosts:
+      - name: "m1_mac"
+        url: "http://192.168.1.101:11434"
+        metadata:
+          ansible_host: "m1_mac"
+          ansible_playbook: "start_ollama.yml"
+      - name: "linux_desktop"
+        url: "http://192.168.1.102:11434"
+        metadata:
+          ansible_host: "linux_desktop"
+          ansible_playbook: "start_ollama.yml"
+
+  - name: "sd_service"
+    strategy: "strategies/sd_router.py"
+    hosts:
+      - name: "linux_desktop"
+        url: "http://192.168.1.102:7860"
+        metadata:
+          ansible_host: "linux_desktop"
+          ansible_playbook: "start_sd.yml"

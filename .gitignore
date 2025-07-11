@@ -15,3 +15,8 @@ wheels/
 # IDE
 .vscode/
 .idea/
+
+# Project stuff
+db/
+config/*
+!config/default_hestia_config.yml
