@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.2.0] - 2025-07-11
+
+### Added
+
+- Comprehensive pytest test suite with 51 tests covering all major components
+- Test fixtures and configuration in `tests/conftest.py`
+- Unit tests for configuration loading and validation (`tests/test_config.py`)
+- Unit tests for strategy execution engine (`tests/test_strategies.py`)
+- Unit tests for database functionality (`tests/test_db.py`)
+- API endpoint tests with mocking (`tests/test_app.py`)
+- Integration tests for end-to-end workflows (`tests/test_integration.py`)
+- pytest configuration file with proper markers and settings
+- Test dependencies: pytest, httpx, pytest-asyncio
+
+### Fixed
+
+- **Type errors in `db.py`**:
+  - Updated deprecated `datetime.utcnow()` to `datetime.now(timezone.utc)`
+  - Fixed SQLAlchemy model attribute access with proper type handling
+  - Updated to use modern `sqlalchemy.orm.declarative_base`
+- **Type errors in `app.py`**:
+  - Fixed SQLAlchemy attribute access issues using `getattr()`
+  - Resolved conditional operand type conflicts with SQLAlchemy columns
+- **Type errors in `schemas.py`**:
+  - Restructured Pydantic models to avoid inheritance conflicts
+  - Removed problematic base class with conflicting field types
+  - Created union type for response models
+- **Strategy execution error handling**:
+  - Improved FileNotFoundError handling in `execute_strategy()`
+  - Added proper try-catch blocks for module loading
+
+### Changed
+
+- Simplified Pydantic response models by removing inheritance
+- Enhanced error handling in strategy execution module
+- Updated SQLAlchemy imports to use modern declarative_base
+
 ## [0.1.0] - Phase 1 Implementation
 
 ### Added

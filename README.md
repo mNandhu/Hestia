@@ -48,16 +48,6 @@ This project is containerized with Docker, so you only need Docker and Docker Co
     }
     ```
 
-## Roadmap
-
-This is just the beginning. The plan is to build Hestia into a fully-featured server manager.
-
-- [ ] **Docker Integration:** Automatically detect and list other running Docker containers.
-- [ ] **The Hearth Dashboard:** A simple web interface to view all managed "Adventurers" (services).
-- [ ] **Health Monitoring (Falna):** Basic health checks to see if services are active or have fallen.
-- [ ] **Service Controls:** Simple actions like start, stop, and restart from the UI.
-- [ ] **Configuration Management:** A way to view the "Skills and Equipment" (environment variables and volumes) of each service.
-
 ## Technology Stack
 
 - **Backend:** FastAPI
