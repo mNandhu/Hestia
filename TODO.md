@@ -10,6 +10,8 @@
   - [ ] **Log Format** Use JSON format for logs to facilitate parsing and analysis.
   - [ ] Replace all print statements with logger calls.
 
+- [x] **Centralize Version Management** Change the version setting to be configured in one place and then updated elsewhere.
+
 ## RoadMap
 
 - [ ] **Docker Integration:** Automatically detect and list other running Docker containers.

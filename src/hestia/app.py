@@ -5,6 +5,7 @@ from typing import Any, Dict, Union
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from importlib.metadata import version, PackageNotFoundError
 
 from hestia.config import load_config, AppConfig, ServiceConfig
 from hestia.db import get_db, init_db, get_service_state, update_service_status
@@ -40,10 +41,15 @@ async def lifespan(app: FastAPI):
     print("Hestia is shutting down.")
 
 
+try:
+    __version__ = version("hestia")  # Matches your project name in pyproject.toml
+except PackageNotFoundError:
+    __version__ = "0.0.0-dev"  # Fallback for non-installed runs
+
 app = FastAPI(
     title="Hestia - Programmable Gateway",
     description="A programmable, application-aware orchestration gateway.",
-    version="0.1.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
