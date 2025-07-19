@@ -13,8 +13,11 @@ RUN uv sync --locked
 # Copy application source
 COPY . .
 
+# Install the project as a package (no-deps to avoid reinstalling dependencies)
+RUN uv pip install --no-deps .
+
 # Expose port
 EXPOSE 80
 
-# Default command to run the FastAPI app
-CMD ["uv", "run", "uvicorn", "src.hestia.app:app", "--host", "0.0.0.0", "--port", "80"]
+# Default command to run the FastAPI app using the installed package
+CMD ["uv", "run", "uvicorn", "hestia.app:app", "--host", "0.0.0.0", "--port", "80"]
