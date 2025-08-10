@@ -21,6 +21,9 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Internal flag to avoid repeated metadata.create_all calls per process
+_DB_INITIALIZED = False
+
 
 class ServiceState(Base):
     """Represents the runtime state of a managed service."""
@@ -47,7 +50,10 @@ def init_db():
     Initializes the database and creates tables if they don't exist.
     This should be called on application startup.
     """
-    Base.metadata.create_all(bind=engine)
+    global _DB_INITIALIZED
+    if not _DB_INITIALIZED:
+        Base.metadata.create_all(bind=engine)
+        _DB_INITIALIZED = True
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -57,6 +63,9 @@ def get_db() -> Generator[Session, None, None]:
     Yields:
         A SQLAlchemy Session object.
     """
+    # Ensure tables exist even when app lifespan skips init during pytest
+    # Safe to call repeatedly due to internal guard
+    init_db()
     db = SessionLocal()
     try:
         yield db
