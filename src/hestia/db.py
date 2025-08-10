@@ -8,6 +8,7 @@ and provides models and functions for interacting with the application's state.
 import os
 from datetime import datetime, timezone
 from typing import Generator
+import threading
 
 from sqlalchemy import create_engine, Column, String, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
@@ -21,8 +22,9 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Internal flag to avoid repeated metadata.create_all calls per process
+# Internal flag and lock to avoid repeated metadata.create_all calls per process
 _DB_INITIALIZED = False
+_DB_INIT_LOCK = threading.Lock()
 
 
 class ServiceState(Base):
@@ -51,9 +53,13 @@ def init_db():
     This should be called on application startup.
     """
     global _DB_INITIALIZED
-    if not _DB_INITIALIZED:
-        Base.metadata.create_all(bind=engine)
-        _DB_INITIALIZED = True
+    if _DB_INITIALIZED:
+        return
+    # Double-checked locking to ensure thread-safe one-time init
+    with _DB_INIT_LOCK:
+        if not _DB_INITIALIZED:
+            Base.metadata.create_all(bind=engine)
+            _DB_INITIALIZED = True
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -63,9 +69,6 @@ def get_db() -> Generator[Session, None, None]:
     Yields:
         A SQLAlchemy Session object.
     """
-    # Ensure tables exist even when app lifespan skips init during pytest
-    # Safe to call repeatedly due to internal guard
-    init_db()
     db = SessionLocal()
     try:
         yield db

@@ -6,6 +6,7 @@ import pytest
 from pathlib import Path
 from typing import Generator, Any
 from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker, Session
 from fastapi.testclient import TestClient
 from unittest.mock import Mock
@@ -18,9 +19,11 @@ from hestia.config import AppConfig, ServiceConfig, HostConfig, AppSettings
 @pytest.fixture
 def test_db() -> Generator[Session, None, None]:
     """Creates a temporary SQLite database for testing."""
-    # Create in-memory SQLite database
+    # Create in-memory SQLite database shared across connections/threads
     engine = create_engine(
-        "sqlite:///:memory:", connect_args={"check_same_thread": False}
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
 

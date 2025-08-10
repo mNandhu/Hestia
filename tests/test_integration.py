@@ -13,6 +13,7 @@ from hestia.config import load_config
 
 
 @pytest.mark.integration
+@pytest.mark.usefixtures("test_db")
 class TestHestiaIntegration:
     """End-to-end integration tests."""
 
@@ -61,7 +62,7 @@ def decide_route(context):
 
         return str(config_file), str(test_strategy)
 
-    def test_complete_workflow_cold_service(self, tmp_path: Path) -> None:
+    def test_complete_workflow_cold_service(self, tmp_path: Path, test_db) -> None:
         """Test complete workflow for a cold service."""
         config_file, _ = self.create_test_environment(tmp_path)
 
@@ -87,7 +88,7 @@ def decide_route(context):
             assert data["target_url"] == "http://localhost:9001"
             assert data["path"] == "test/endpoint"
 
-    def test_service_state_persistence(self, tmp_path: Path) -> None:
+    def test_service_state_persistence(self, tmp_path: Path, test_db) -> None:
         """Test that service state persists across requests."""
         config_file, _ = self.create_test_environment(tmp_path)
         test_config = load_config(config_file)
@@ -109,7 +110,7 @@ def decide_route(context):
 
             # Both should have same decision logic based on service state
 
-    def test_multiple_services_isolation(self, tmp_path: Path) -> None:
+    def test_multiple_services_isolation(self, tmp_path: Path, test_db) -> None:
         """Test that multiple services work independently."""
         strategies_dir = tmp_path / "strategies"
         strategies_dir.mkdir()
@@ -176,7 +177,7 @@ def decide_route(context):
             assert data2["service"] == "service2"
             assert data2["target_url"] == "http://service2:8002"
 
-    def test_error_handling_integration(self, tmp_path: Path) -> None:
+    def test_error_handling_integration(self, tmp_path: Path, test_db) -> None:
         """Test error handling in complete workflow."""
         strategies_dir = tmp_path / "strategies"
         strategies_dir.mkdir()
