@@ -59,6 +59,7 @@ T007. [Integration Tests] Define activity/idle shutdown scenarios [P]
 T008. [Unit Tests] Config loader tests [P]
 - `tests/unit/test_config_loader.py`: load `hestia_config.yml`, env overrides, validation errors
 - Dependencies: T002
+ - Status: DONE (Pydantic models with YAML load, env overrides, validation)
 
 T009. [Unit Tests] Strategy loader tests [P]
 - `tests/unit/test_strategy_loader.py`: discover/load from `strategies/`, prevent duplicate registrations
@@ -87,6 +88,7 @@ T013. [Source] Contract routing stubs to make contract tests discover endpoints
 T014. [Source] Config loader implementation
 - Pydantic models; supports env overrides; load at startup
 - Dependencies: T008
+ - Status: DONE (implemented with YAML support and dynamic env override pickup)
 
 T015. [Source] SQLAlchemy models per `data-model.md`
 - Tables: Service, Machine, RoutingRule, Activity, AuthKey

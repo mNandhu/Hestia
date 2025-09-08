@@ -1,16 +1,21 @@
-import os
 import time
 from urllib.parse import urljoin
 
 import httpx
 from fastapi import FastAPI, Response
 
-app = FastAPI(title="Hestia API")
+from hestia.config import load_config
 
+app = FastAPI(title="Hestia API")
 
 # In-memory minimal state for readiness/idle tracking (per-service)
 _services: dict[str, dict] = {}
 _IDLE_THREAD_STARTED = False
+
+
+def _get_config():
+    """Get current config (reloads to pick up env changes in tests)"""
+    return load_config()
 
 
 @app.post("/v1/requests")
@@ -37,8 +42,8 @@ def start_service(serviceId: str):
     svc["readiness"] = "not_ready"
     svc["last_used_ms"] = now_ms
 
-    health_url = _get_service_health_url(serviceId)
-    warmup_ms = _get_int_env("OLLAMA_WARMUP_MS", 0) if serviceId == "ollama" else 0
+    health_url = _get_config().services.get(serviceId, _get_config().services["ollama"]).health_url
+    warmup_ms = _get_config().services.get(serviceId, _get_config().services["ollama"]).warmup_ms
 
     # Background: poll health or wait warmup
     if health_url:
@@ -65,14 +70,15 @@ def start_service(serviceId: str):
 def transparent_proxy_get(serviceId: str, proxyPath: str) -> Response:
     _ensure_idle_monitor_started()
     # Minimal behavior to satisfy integration test for ollama GET
-    base = _resolve_service_base_url(serviceId)
+    service_config = _get_config().services.get(serviceId, _get_config().services["ollama"])
+    base = service_config.base_url
     target = urljoin(base.rstrip("/") + "/", proxyPath)
     # Interpret retry count as TOTAL attempts on primary (including the first attempt)
-    total_attempts = _get_int_env("OLLAMA_RETRY_COUNT", 1)
+    total_attempts = service_config.retry_count
     if total_attempts < 1:
         total_attempts = 1
-    retry_delay_ms = _get_int_env("OLLAMA_RETRY_DELAY_MS", 0)
-    fallback = os.getenv("OLLAMA_FALLBACK_URL") if serviceId == "ollama" else None
+    retry_delay_ms = service_config.retry_delay_ms
+    fallback = service_config.fallback_url
 
     with httpx.Client(timeout=10.0) as client:
         for attempt in range(total_attempts):
@@ -111,30 +117,9 @@ def transparent_proxy_get(serviceId: str, proxyPath: str) -> Response:
     return Response(status_code=503)
 
 
-def _resolve_service_base_url(service_id: str) -> str:
-    if service_id == "ollama":
-        return os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    # Future: look up from config/database
-    return os.getenv("Hestia_Default_Service_URL", "http://localhost:8081")
-
-
-def _get_int_env(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, default))
-    except Exception:
-        return default
-
-
-def _get_service_health_url(service_id: str) -> str | None:
-    if service_id == "ollama":
-        return os.getenv("OLLAMA_HEALTH_URL")
-    return None
-
-
 def _get_idle_timeout_ms(service_id: str) -> int:
-    if service_id == "ollama":
-        return _get_int_env("OLLAMA_IDLE_TIMEOUT_MS", 0)
-    return 0
+    service_config = _get_config().services.get(service_id, _get_config().services["ollama"])
+    return service_config.idle_timeout_ms
 
 
 def _json(payload: dict) -> Response:
