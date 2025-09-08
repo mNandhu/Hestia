@@ -1,0 +1,27 @@
+version: "3.9"
+services:
+  hestia:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./strategies:/app/strategies
+      - ./hestia_config.yml:/app/hestia_config.yml
+    depends_on:
+      - semaphore
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - SEMAPHORE_ADMIN=admin
+      - SEMAPHORE_ADMIN_PASSWORD=admin
+      - SEMAPHORE_ADMIN_NAME=Administrator
+      - SEMAPHORE_ADMIN_EMAIL=admin@example.com
+    volumes:
+      - semaphore_data:/var/lib/semaphore
+volumes:
+  semaphore_data: {}
+  hestia_sqlite: {}

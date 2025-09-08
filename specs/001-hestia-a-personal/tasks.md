@@ -19,17 +19,20 @@ T001. [Setup] Create repository structure (no code yet)
 - Create directories: `src/models`, `src/services`, `src/cli`, `src/lib`, `tests/contract`, `tests/integration`, `tests/unit`
 - Add `.gitkeep` in empty dirs
 - Dependencies: none
+ - Status: DONE
 
 T002. [Setup] Initialize `pyproject.toml` and dependencies
 - Python 3.12; runtime deps: fastapi, uvicorn, pydantic, sqlalchemy, httpx
 - Dev deps: pytest, pytest-asyncio, respx, black, ruff
 - Dependencies: T001
+ - Status: DONE
 
 T003. [Contract Tests] Generate failing contract tests from OpenAPI [P]
 - For each endpoint in `contracts/openapi.yaml`, create `tests/contract/test_contract_<name>.py`
 - Validate: route exists, methods allowed, required fields enforced, security when enabled
 - Endpoints: `/services/{serviceId}/{proxyPath}`, `/v1/requests`, `/v1/services/{id}/start`, `/v1/services/{id}/status`
 - Dependencies: T002
+ - Status: DONE (tests import app and expect 501 for stubs)
 
 T004. [Integration Tests] Define gateway transparency scenarios [P]
 - `tests/integration/test_transparent_proxy.py`: calling `GET /services/ollama/v1/models` returns 200 with mocked downstream
@@ -64,15 +67,18 @@ T010. [Unit Tests] Data model tests [P]
 T011. [Infra] Dockerfile (multi-stage) and docker-compose (hestia + semaphore)
 - Compose: port 8080, named volumes `hestia_sqlite`, `semaphore_data`, bind-mount `strategies/` and `hestia_config.yml`
 - Dependencies: T001
+ - Status: DONE
 
 T012. [Source] Minimal FastAPI app skeleton to load and serve contracts (no business logic)
-- `src/lib/app.py` with FastAPI instance and health route `/__health`
+ - `src/hestia/app.py` with FastAPI instance and health route `/__health`
 - Wire uvicorn entry in `pyproject.toml`
 - Dependencies: T003 (tests should fail until endpoints exist)
+ - Status: DONE (implemented at `src/hestia/app.py`)
 
 T013. [Source] Contract routing stubs to make contract tests discover endpoints
 - Implement routes: transparent proxy `/services/{serviceId}/{proxyPath}` (methods GET/POST/PUT/PATCH/DELETE), `/v1/requests`, `/v1/services/{id}/start`, `/v1/services/{id}/status` returning 501
 - Dependencies: T012; Target: make routing exist but tests still fail on behavior
+ - Status: DONE (all endpoints return 501 as stubs)
 
 T014. [Source] Config loader implementation
 - Pydantic models; supports env overrides; load at startup
