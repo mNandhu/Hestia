@@ -1,34 +1,157 @@
 # Tasks: Hestia - Personal On-Demand Service Gateway
 
-1. Create repo src structure (models/, services/, cli/, lib/)
-2. Initialize pyproject.toml with Python 3.12 and dependencies (FastAPI, Uvicorn, Pydantic, SQLAlchemy, httpx)
-3. Add dev dependencies: pytest, pytest-asyncio, respx, black, ruff
-4. Add docker-compose.yml with hestia and semaphore services
-5. Add Dockerfile (multi-stage) for hestia image
-6. Define named volumes for SQLite and semaphore data
-7. Bind-mount strategies/ and hestia_config.yml in compose for dev
-8. Implement config loader for hestia_config.yml (Pydantic model)
-9. Implement SQLite models (Service, Machine, RoutingRule, Activity, AuthKey) with SQLAlchemy
-10. Implement persistence layer and migrations bootstrap (if needed)
-11. Implement strategy plugin loader (importlib from strategies/)
-12. Implement health/readiness checker (health endpoint or warm-up delay)
-13. Implement startup policy (retry → fallback → error) with configuration
-14. Implement request queue for cold services (FIFO, bounded, timeouts)
-15. Implement gateway endpoint (POST /v1/requests) with transparent proxying via httpx
-16. Implement service status endpoint (GET /v1/services/{id}/status)
-17. Implement proactive start endpoint (POST /v1/services/{id}/start)
-18. Add optional API key middleware; add dashboard auth (username/password) stub
-19. Add structured logging with levels and event types per FR-013
-20. Integrate with Semaphore API over internal network (http://semaphore:3000)
-21. Add unit tests for config loader, models, strategy loader
-22. Add integration tests for gateway→strategy→db flow (pytest-asyncio)
-23. Add mocks for Semaphore (respx) and service health endpoints
-24. Add CI (GitHub Actions) for lint (ruff) and format (black) on push to main
-25. Add CI job to run pytest on Python 3.12
-26. Write quickstart.md content and verify endpoints with curl examples
-27. Document contracts in contracts/openapi.yaml and keep in sync
-28. Create example strategies/ placeholder and sample hestia_config.yml
-29. Add versioning (0.1.0) and CHANGELOG skeleton
-30. Review and update docs; ensure spec alignment
+Feature Dir: `/home/mnand/Projects/Hestia/specs/001-hestia-a-personal`
+Contracts: `/home/mnand/Projects/Hestia/specs/001-hestia-a-personal/contracts/openapi.yaml`
+Plan: `/home/mnand/Projects/Hestia/specs/001-hestia-a-personal/plan.md`
+Data Model: `/home/mnand/Projects/Hestia/specs/001-hestia-a-personal/data-model.md`
+Quickstart: `/home/mnand/Projects/Hestia/specs/001-hestia-a-personal/quickstart.md`
 
-[P] Parallelizable: 2,3,4,6,21,24,25,29
+Constitution Imperatives:
+- Test-First (NON-NEGOTIABLE): Write failing tests before implementation
+- Integration-First: Contract and integration tests precede unit tests
+
+## Parallel Groups Legend
+[P] = Tasks can run in parallel (different files). No [P] for tasks touching same file/area.
+
+## Tasks
+
+T001. [Setup] Create repository structure (no code yet)
+- Create directories: `src/models`, `src/services`, `src/cli`, `src/lib`, `tests/contract`, `tests/integration`, `tests/unit`
+- Add `.gitkeep` in empty dirs
+- Dependencies: none
+
+T002. [Setup] Initialize `pyproject.toml` and dependencies
+- Python 3.12; runtime deps: fastapi, uvicorn, pydantic, sqlalchemy, httpx
+- Dev deps: pytest, pytest-asyncio, respx, black, ruff
+- Dependencies: T001
+
+T003. [Contract Tests] Generate failing contract tests from OpenAPI [P]
+- For each endpoint in `contracts/openapi.yaml`, create `tests/contract/test_contract_<name>.py`
+- Validate: route exists, methods allowed, required fields enforced, security when enabled
+- Endpoints: `/services/{serviceId}/{proxyPath}`, `/v1/requests`, `/v1/services/{id}/start`, `/v1/services/{id}/status`
+- Dependencies: T002
+
+T004. [Integration Tests] Define gateway transparency scenarios [P]
+- `tests/integration/test_transparent_proxy.py`: calling `GET /services/ollama/v1/models` returns 200 with mocked downstream
+- Include cold-start path: first call queues until ready
+- Include auth enabled/disabled variants
+- Dependencies: T002
+
+T005. [Integration Tests] Define startup policy scenarios [P]
+- `tests/integration/test_startup_policy.py`: retry up to N, then fallback to other machine, finally error → assert logs and response codes
+- Dependencies: T002
+
+T006. [Integration Tests] Define readiness/warm-up scenarios [P]
+- `tests/integration/test_readiness.py`: health endpoint success vs warm-up delay fallback behavior
+- Dependencies: T002
+
+T007. [Integration Tests] Define activity/idle shutdown scenarios [P]
+- `tests/integration/test_idle_shutdown.py`: after idle timeout, service transitions to cold and new request re-warms
+- Dependencies: T002
+
+T008. [Unit Tests] Config loader tests [P]
+- `tests/unit/test_config_loader.py`: load `hestia_config.yml`, env overrides, validation errors
+- Dependencies: T002
+
+T009. [Unit Tests] Strategy loader tests [P]
+- `tests/unit/test_strategy_loader.py`: discover/load from `strategies/`, prevent duplicate registrations
+- Dependencies: T002
+
+T010. [Unit Tests] Data model tests [P]
+- `tests/unit/test_models.py`: SQLAlchemy models and constraints from `data-model.md`
+- Dependencies: T002
+
+T011. [Infra] Dockerfile (multi-stage) and docker-compose (hestia + semaphore)
+- Compose: port 8080, named volumes `hestia_sqlite`, `semaphore_data`, bind-mount `strategies/` and `hestia_config.yml`
+- Dependencies: T001
+
+T012. [Source] Minimal FastAPI app skeleton to load and serve contracts (no business logic)
+- `src/lib/app.py` with FastAPI instance and health route `/__health`
+- Wire uvicorn entry in `pyproject.toml`
+- Dependencies: T003 (tests should fail until endpoints exist)
+
+T013. [Source] Contract routing stubs to make contract tests discover endpoints
+- Implement routes: transparent proxy `/services/{serviceId}/{proxyPath}` (methods GET/POST/PUT/PATCH/DELETE), `/v1/requests`, `/v1/services/{id}/start`, `/v1/services/{id}/status` returning 501
+- Dependencies: T012; Target: make routing exist but tests still fail on behavior
+
+T014. [Source] Config loader implementation
+- Pydantic models; supports env overrides; load at startup
+- Dependencies: T008
+
+T015. [Source] SQLAlchemy models per `data-model.md`
+- Tables: Service, Machine, RoutingRule, Activity, AuthKey
+- Dependencies: T010
+
+T016. [Source] Persistence provider (SQLite) and initialization
+- Create engine, session management, migrations bootstrap (if needed)
+- Dependencies: T015
+
+T017. [Source] Strategy plugin loader
+- Load from `strategies/` via importlib; registry with thread-safe singleton
+- Dependencies: T009
+
+T018. [Source] Readiness checker
+- Health endpoint polling; warm-up delay fallback per service
+- Dependencies: T006
+
+T019. [Source] Startup policy engine
+- Retry with limit/delay; fallback machine selection; terminal error and event log
+- Dependencies: T005, T016, T017, T018
+
+T020. [Source] Request queue for cold services
+- FIFO, bounded size, per-service timeouts; prevent duplicate startups
+- Dependencies: T004, T019
+
+T021. [Source] Transparent proxy implementation
+- Implement proxy for `/services/{serviceId}/{proxyPath}` using httpx; preserve method, headers, body; stream response
+- Dependencies: T003, T020
+
+T022. [Source] Generic POST `/v1/requests` dispatcher
+- Accept GatewayRequest, route to service, use queue/strategy engines
+- Dependencies: T003, T020
+
+T023. [Source] Service status and proactive start endpoints
+- GET status, POST start; integrate with readiness and queue
+- Dependencies: T003, T018, T019
+
+T024. [Source] Optional auth middleware
+- API key for API; dashboard username/password stub; warnings when disabled
+- Dependencies: T004, T008
+
+T025. [Source] Structured logging and basic metrics
+- Log events per FR-013; add request IDs; counters/timers skeleton
+- Dependencies: T004, T005
+
+T026. [Integration] Semaphore API client and mocks
+- httpx client; internal URL `http://semaphore:3000`; respx mocks in tests
+- Dependencies: T003, T022
+
+T027. [CI/CD] GitHub Actions: lint and format
+- Ruff + Black on push to main
+- Dependencies: T002
+
+T028. [CI/CD] GitHub Actions: tests
+- Install deps and run `pytest`
+- Dependencies: T002, T003
+
+T029. [Docs] Example `strategies/` and `hestia_config.yml`
+- Provide placeholders and comments for customization
+- Dependencies: T014, T017
+
+T030. [Docs] Update quickstart with curl examples and stable URL
+- Verify `/services/{serviceId}/...` usage and note `OLLAMA_BASE_URL=http://localhost:8080/services/ollama`
+- Dependencies: T021
+
+## Parallelization Guide
+- [P] T003, T004, T005, T006, T007, T008, T009, T010 can run in parallel after T002
+- [P] T027 and T028 can run in parallel after T002
+
+## Suggested Task Agent Commands
+- tasks run T003
+- tasks run T004
+- tasks run T005
+- tasks run T006
+- tasks run T007
+- tasks run T008
+- tasks run T009
+- tasks run T010
