@@ -85,12 +85,14 @@ A developer working on personal projects across multiple machines wants to acces
 - **FR-007**: System MUST make the entire process transparent to client applications
 - **FR-008**: System MUST persist service configurations and machine assignments across restarts
 - **FR-009**: System MUST track which services are currently running and on which machines
-- **FR-010**: System MUST handle service startup failures gracefully [NEEDS CLARIFICATION: what is the expected behavior - retry, fallback machine, error to client?]
-- **FR-011**: System MUST authenticate and authorize access to services [NEEDS CLARIFICATION: what authentication mechanism should be used?]
-- **FR-012**: System MUST handle concurrent requests for the same inactive service [NEEDS CLARIFICATION: queue requests or start multiple instances?]
-- **FR-013**: System MUST provide [NEEDS CLARIFICATION: what level of logging/monitoring is required for operations?]
-- **FR-014**: System MUST support [NEEDS CLARIFICATION: what types of services - HTTP APIs, databases, custom protocols?]
-- **FR-015**: System MUST define service readiness [NEEDS CLARIFICATION: how does Hestia determine when a started service is ready to receive requests?]
+ - **FR-010**: System MUST handle service startup failures via a configurable policy: retry with a configurable limit and delay, then attempt a fallback machine based on pre-configured rules; if all attempts fail, return a clear error to the client and record the failure event.
+ - **FR-011**: System SHOULD support optional authentication. When enabled, API requests use API keys and the dashboard uses username/password; when disabled, the system MUST warn about reduced security.
+ - **FR-012**: System MUST queue incoming requests targeting an inactive service until that service is healthy, then forward the queued requests in order; concurrent duplicate startups for the same service MUST be prevented.
+ - **FR-013**: System MUST provide configurable logging and basic observability. At minimum, capture: request routing decisions, service start/stop events, startup failures and retries, health/readiness status changes, idle shutdowns, and authentication decisions (excluding sensitive data). Logging levels MUST be user-configurable.
+    - Recommendation: Support structured logs and an optional activity timeline summarizing the above events; expose basic metrics such as counts and durations for starts, retries, and routed requests.
+ - **FR-014**: System MUST support HTTP APIs only in this phase; other protocols are explicitly out of scope.
+ - **FR-015**: System MUST determine service readiness via a configurable readiness check. Preferred: an HTTP health endpoint indicating success. If no health endpoint is provided, allow a fallback such as a fixed warm-up period before accepting requests. The readiness condition MUST be definable per service.
+    - Recommendation: Where appropriate, allow additional readiness options such as a simple probe request or detecting a service-ready signal.
 
 ### Key Entities *(include if feature involves data)*
 - **Service**: Represents a backend service (LLM, database, API) with its configuration, resource requirements, and current state
@@ -111,8 +113,8 @@ A developer working on personal projects across multiple machines wants to acces
 - [x] All mandatory sections completed
 
 ### Requirement Completeness
-- [ ] No [NEEDS CLARIFICATION] markers remain (7 clarification items need resolution)
-- [ ] Requirements are testable and unambiguous  
+- [x] No [NEEDS CLARIFICATION] markers remain
+- [x] Requirements are testable and unambiguous  
 - [x] Success criteria are measurable
 - [x] Scope is clearly bounded
 - [x] Dependencies and assumptions identified
@@ -128,7 +130,7 @@ A developer working on personal projects across multiple machines wants to acces
 - [x] User scenarios defined
 - [x] Requirements generated
 - [x] Entities identified
-- [ ] Review checklist passed (pending clarification resolution)
+- [x] Review checklist passed
 
 ---
 
