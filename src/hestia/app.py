@@ -1,8 +1,10 @@
+import asyncio
 import time
 from urllib.parse import urljoin
 
 import httpx
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request
+from fastapi.responses import StreamingResponse
 
 from hestia.config import load_config
 from hestia.persistence import init_database
@@ -73,37 +75,140 @@ def start_service(serviceId: str):
     return Response(status_code=202)
 
 
-# Transparent proxy path supports multiple methods; stub all
-@app.get("/services/{serviceId}/{proxyPath:path}")
-def transparent_proxy_get(serviceId: str, proxyPath: str) -> Response:
+# Transparent proxy path supports multiple methods
+@app.api_route(
+    "/services/{serviceId}/{proxyPath:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"]
+)
+async def transparent_proxy(request: Request, serviceId: str, proxyPath: str) -> Response:
+    """Transparent proxy supporting all HTTP methods with queue integration for cold services."""
     _ensure_idle_monitor_started()
-    # Minimal behavior to satisfy integration test for ollama GET
+
+    # Get service configuration
     service_config = _get_config().services.get(serviceId, _get_config().services["ollama"])
+
+    # Check if service is ready
+    service_state = _services.get(serviceId, {})
+    is_service_ready = (
+        service_state.get("state") == "hot" and service_state.get("readiness") == "ready"
+    )
+
+    # If service is cold, queue the request and start the service
+    if not is_service_ready:
+        # Check if service startup is already in progress
+        if not _request_queue.is_service_starting(serviceId):
+            # Mark service as starting to prevent duplicate startup attempts
+            if _request_queue.mark_service_starting(serviceId):
+                # Start service asynchronously
+                asyncio.create_task(_start_service_async(serviceId, service_config))
+
+        # Prepare request data for queuing
+        request_data = {
+            "method": request.method,
+            "path": proxyPath,
+            "headers": dict(request.headers),
+            "query_params": str(request.url.query) if request.url.query else None,
+            "body": await request.body() if request.method in ["POST", "PUT", "PATCH"] else None,
+        }
+
+        try:
+            # Queue the request and wait for service to be ready
+            await _request_queue.queue_request(
+                service_id=serviceId,
+                request_data=request_data,
+                timeout_seconds=service_config.request_timeout_seconds,
+            )
+
+            # If we get here, service is ready, proceed with actual proxy
+
+        except Exception:
+            # Queue timeout or other error
+            return Response(status_code=503, content="Service unavailable")
+
+    # Service is ready, perform the actual proxy request
+    return await _perform_proxy_request(request, serviceId, proxyPath, service_config)
+
+
+async def _perform_proxy_request(
+    request: Request, serviceId: str, proxyPath: str, service_config
+) -> Response:
+    """Perform the actual proxy request to the upstream service."""
     base = service_config.base_url
     target = urljoin(base.rstrip("/") + "/", proxyPath)
-    # Interpret retry count as TOTAL attempts on primary (including the first attempt)
+
+    # Prepare request parameters
+    method = request.method
+    headers = dict(request.headers)
+
+    # Remove hop-by-hop headers
+    hop_by_hop_headers = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "host",
+    }
+    headers = {k: v for k, v in headers.items() if k.lower() not in hop_by_hop_headers}
+
+    # Get request body for methods that support it
+    body = None
+    if method in ["POST", "PUT", "PATCH"]:
+        body = await request.body()
+
+    # Get query parameters
+    query_params = str(request.url.query) if request.url.query else None
+    if query_params:
+        target = f"{target}?{query_params}"
+
+    # Retry configuration
     total_attempts = service_config.retry_count
     if total_attempts < 1:
         total_attempts = 1
     retry_delay_ms = service_config.retry_delay_ms
     fallback = service_config.fallback_url
 
-    with httpx.Client(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Try primary endpoint with retries
         for attempt in range(total_attempts):
             try:
-                upstream = client.get(target)
-                # mark activity
-                _touch(serviceId)
-                return Response(
-                    content=upstream.content,
-                    status_code=upstream.status_code,
-                    media_type=upstream.headers.get("content-type"),
+                upstream_response = await client.request(
+                    method=method, url=target, headers=headers, content=body, follow_redirects=False
                 )
+
+                # Mark activity for idle tracking
+                _touch(serviceId)
+
+                # Prepare response headers
+                response_headers = dict(upstream_response.headers)
+                # Remove hop-by-hop headers from response
+                response_headers = {
+                    k: v for k, v in response_headers.items() if k.lower() not in hop_by_hop_headers
+                }
+
+                # Handle streaming responses
+                if _should_stream_response(upstream_response):
+                    return StreamingResponse(
+                        content=upstream_response.iter_bytes(chunk_size=8192),
+                        status_code=upstream_response.status_code,
+                        headers=response_headers,
+                        media_type=upstream_response.headers.get("content-type"),
+                    )
+                else:
+                    return Response(
+                        content=upstream_response.content,
+                        status_code=upstream_response.status_code,
+                        headers=response_headers,
+                        media_type=upstream_response.headers.get("content-type"),
+                    )
+
             except Exception:
-                # if not last attempt, honor delay and retry
+                # If not last attempt, honor delay and retry
                 if attempt < (total_attempts - 1):
                     if retry_delay_ms > 0:
-                        time.sleep(retry_delay_ms / 1000.0)
+                        await asyncio.sleep(retry_delay_ms / 1000.0)
                     continue
                 # else exit loop to try fallback (if any)
                 break
@@ -112,17 +217,114 @@ def transparent_proxy_get(serviceId: str, proxyPath: str) -> Response:
         if fallback:
             try:
                 fallback_target = urljoin(fallback.rstrip("/") + "/", proxyPath)
-                upstream = client.get(fallback_target)
-                _touch(serviceId)
-                return Response(
-                    content=upstream.content,
-                    status_code=upstream.status_code,
-                    media_type=upstream.headers.get("content-type"),
+                if query_params:
+                    fallback_target = f"{fallback_target}?{query_params}"
+
+                upstream_response = await client.request(
+                    method=method,
+                    url=fallback_target,
+                    headers=headers,
+                    content=body,
+                    follow_redirects=False,
                 )
+
+                _touch(serviceId)
+
+                response_headers = dict(upstream_response.headers)
+                response_headers = {
+                    k: v for k, v in response_headers.items() if k.lower() not in hop_by_hop_headers
+                }
+
+                if _should_stream_response(upstream_response):
+                    return StreamingResponse(
+                        content=upstream_response.iter_bytes(chunk_size=8192),
+                        status_code=upstream_response.status_code,
+                        headers=response_headers,
+                        media_type=upstream_response.headers.get("content-type"),
+                    )
+                else:
+                    return Response(
+                        content=upstream_response.content,
+                        status_code=upstream_response.status_code,
+                        headers=response_headers,
+                        media_type=upstream_response.headers.get("content-type"),
+                    )
+
             except Exception:
                 pass
 
-    return Response(status_code=503)
+    return Response(status_code=503, content="Service unavailable")
+
+
+def _should_stream_response(response: httpx.Response) -> bool:
+    """Determine if response should be streamed based on content type and size."""
+    content_type = response.headers.get("content-type", "").lower()
+
+    # Stream server-sent events and other streaming content types
+    streaming_types = [
+        "text/event-stream",
+        "application/octet-stream",
+        "text/plain",
+        "application/json",  # Large JSON responses
+    ]
+
+    if any(stream_type in content_type for stream_type in streaming_types):
+        return True
+
+    # Stream large responses (>1MB)
+    content_length = response.headers.get("content-length")
+    if content_length and int(content_length) > 1024 * 1024:
+        return True
+
+    return False
+
+
+async def _start_service_async(service_id: str, service_config) -> None:
+    """Start a cold service asynchronously and notify queued requests when ready."""
+    try:
+        # Simulate service startup process
+        # In a real implementation, this might call the existing start endpoint logic
+        # or use a strategy pattern to start different types of services
+
+        # For now, use the existing readiness logic
+        health_url = service_config.health_url
+        warmup_ms = service_config.warmup_ms
+
+        if health_url:
+            # Try health check approach
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(health_url)
+                    if resp.status_code == 200:
+                        _services.setdefault(service_id, {})["readiness"] = "ready"
+                        _services[service_id]["state"] = "hot"
+                    else:
+                        # Fallback to warmup delay
+                        if warmup_ms > 0:
+                            await asyncio.sleep(warmup_ms / 1000.0)
+                        _services.setdefault(service_id, {})["readiness"] = "ready"
+                        _services[service_id]["state"] = "hot"
+            except Exception:
+                # Fallback to warmup delay
+                if warmup_ms > 0:
+                    await asyncio.sleep(warmup_ms / 1000.0)
+                _services.setdefault(service_id, {})["readiness"] = "ready"
+                _services[service_id]["state"] = "hot"
+        else:
+            # Use warmup delay
+            if warmup_ms > 0:
+                await asyncio.sleep(warmup_ms / 1000.0)
+            _services.setdefault(service_id, {})["readiness"] = "ready"
+            _services[service_id]["state"] = "hot"
+
+        # Mark service as ready and process all queued requests
+        _request_queue.mark_service_ready(service_id)
+        _request_queue.process_all_requests(service_id, {"service_ready": True})
+
+    except Exception:
+        # Service startup failed, clear the queue and mark as not starting
+        _request_queue.clear_queue(service_id)
+        _request_queue.mark_service_ready(service_id)  # Reset starting flag
 
 
 def _get_idle_timeout_ms(service_id: str) -> int:

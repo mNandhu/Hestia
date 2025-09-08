@@ -125,6 +125,7 @@ T020. [Source] Request queue for cold services
 T021. [Source] Transparent proxy implementation
 - Implement proxy for `/services/{serviceId}/{proxyPath}` using httpx; preserve method, headers, body; stream response
 - Dependencies: T003, T020
+ - Status: DONE (all HTTP methods supported, queue integration for cold services, streaming responses, comprehensive testing)
 
 T022. [Source] Generic POST `/v1/requests` dispatcher
 - Accept GatewayRequest, route to service, use queue/strategy engines
