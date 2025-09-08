@@ -5,8 +5,12 @@ import httpx
 from fastapi import FastAPI, Response
 
 from hestia.config import load_config
+from hestia.persistence import init_database
 
 app = FastAPI(title="Hestia API")
+
+# Initialize database on startup
+init_database()
 
 # In-memory minimal state for readiness/idle tracking (per-service)
 _services: dict[str, dict] = {}

@@ -100,6 +100,7 @@ T015. [Source] SQLAlchemy models per `data-model.md`
 T016. [Source] Persistence provider (SQLite) and initialization
 - Create engine, session management, migrations bootstrap (if needed)
 - Dependencies: T015
+ - Status: DONE (SQLite with session management, context managers, testing support, auto-initialization)
 
 T017. [Source] Strategy plugin loader
 - Load from `strategies/` via importlib; registry with thread-safe singleton
