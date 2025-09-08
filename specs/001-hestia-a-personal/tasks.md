@@ -54,7 +54,7 @@ T006. [Integration Tests] Define readiness/warm-up scenarios [P]
 T007. [Integration Tests] Define activity/idle shutdown scenarios [P]
 - `tests/integration/test_idle_shutdown.py`: after idle timeout, service transitions to cold and new request re-warms
 - Dependencies: T002
- - Status: DONE (documented behavior; minimal state/tracking in place; background idle monitor to be added later)
+ - Status: DONE (idle monitor thread implemented; state flips to cold after OLLAMA_IDLE_TIMEOUT_MS)
 
 T008. [Unit Tests] Config loader tests [P]
 - `tests/unit/test_config_loader.py`: load `hestia_config.yml`, env overrides, validation errors
@@ -103,10 +103,12 @@ T017. [Source] Strategy plugin loader
 T018. [Source] Readiness checker
 - Health endpoint polling; warm-up delay fallback per service
 - Dependencies: T006
+ - Status: DONE (health URL 200 flips to ready/hot; otherwise warm-up ms then ready/hot)
 
 T019. [Source] Startup policy engine
 - Retry with limit/delay; fallback machine selection; terminal error and event log
 - Dependencies: T005, T016, T017, T018
+ - Status: PARTIAL (GET proxy supports retry/delay and a single fallback attempt; no event log yet)
 
 T020. [Source] Request queue for cold services
 - FIFO, bounded size, per-service timeouts; prevent duplicate startups

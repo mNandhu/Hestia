@@ -17,9 +17,7 @@ def test_idle_shutdown_transitions_service_to_cold(monkeypatch):
     # Wait beyond idle timeout
     time.sleep(0.1)
 
-    # Expect status.state == 'cold' when implemented, else accept 501 placeholder
+    # Expect status.state == 'cold' after timeout
     st = client.get("/v1/services/ollama/status")
-    if st.status_code == 200:
-        assert st.json().get("state") in {"cold", "starting", "hot"}
-    else:
-        assert st.status_code == 501
+    assert st.status_code == 200
+    assert st.json().get("state") == "cold"

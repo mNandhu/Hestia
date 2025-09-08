@@ -10,6 +10,7 @@ app = FastAPI(title="Hestia API")
 
 # In-memory minimal state for readiness/idle tracking (per-service)
 _services: dict[str, dict] = {}
+_IDLE_THREAD_STARTED = False
 
 
 @app.post("/v1/requests")
@@ -26,6 +27,7 @@ def get_status(serviceId: str):
 
 @app.post("/v1/services/{serviceId}/start")
 def start_service(serviceId: str):
+    _ensure_idle_monitor_started()
     # Initialize service state
     now_ms = int(time.time() * 1000)
     svc = _services.setdefault(
@@ -61,6 +63,7 @@ def start_service(serviceId: str):
 # Transparent proxy path supports multiple methods; stub all
 @app.get("/services/{serviceId}/{proxyPath:path}")
 def transparent_proxy_get(serviceId: str, proxyPath: str) -> Response:
+    _ensure_idle_monitor_started()
     # Minimal behavior to satisfy integration test for ollama GET
     base = _resolve_service_base_url(serviceId)
     target = urljoin(base.rstrip("/") + "/", proxyPath)
@@ -106,11 +109,6 @@ def transparent_proxy_get(serviceId: str, proxyPath: str) -> Response:
                 pass
 
     return Response(status_code=503)
-    return Response(
-        content=upstream.content,
-        status_code=upstream.status_code,
-        media_type=upstream.headers.get("content-type"),
-    )
 
 
 def _resolve_service_base_url(service_id: str) -> str:
@@ -133,6 +131,12 @@ def _get_service_health_url(service_id: str) -> str | None:
     return None
 
 
+def _get_idle_timeout_ms(service_id: str) -> int:
+    if service_id == "ollama":
+        return _get_int_env("OLLAMA_IDLE_TIMEOUT_MS", 0)
+    return 0
+
+
 def _json(payload: dict) -> Response:
     import json as _jsonlib
 
@@ -149,6 +153,33 @@ def _touch(service_id: str) -> None:
         service_id, {"state": "hot", "readiness": "ready", "last_used_ms": now_ms}
     )
     svc["last_used_ms"] = now_ms
+
+
+def _idle_monitor_loop():
+    check_interval_ms = 25
+    while True:
+        now_ms = int(time.time() * 1000)
+        for sid, svc in list(_services.items()):
+            idle_ms = _get_idle_timeout_ms(sid)
+            if idle_ms <= 0:
+                continue
+            last = svc.get("last_used_ms", now_ms)
+            # Only flip hot services that have exceeded idle timeout
+            if svc.get("state") == "hot" and (now_ms - last) >= idle_ms:
+                svc["state"] = "cold"
+                svc["readiness"] = "not_ready"
+        time.sleep(check_interval_ms / 1000.0)
+
+
+def _ensure_idle_monitor_started() -> None:
+    global _IDLE_THREAD_STARTED
+    if _IDLE_THREAD_STARTED:
+        return
+    import threading
+
+    t = threading.Thread(target=_idle_monitor_loop, name="hestia-idle-monitor", daemon=True)
+    t.start()
+    _IDLE_THREAD_STARTED = True
 
 
 def run() -> None:
