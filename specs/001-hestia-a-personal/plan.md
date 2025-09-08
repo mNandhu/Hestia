@@ -29,7 +29,7 @@
 - Phase 3-4: Implementation execution (manual or via tools)
 
 ## Summary
-Hestia provides a single, smart gateway for client applications to access personal services across multiple machines. It determines the required service from the request, auto-starts it on the appropriate machine per rules, routes the request, and shuts down idle services. The delivery approach is containerized (Docker + docker-compose), with a Python 3.12 FastAPI application, SQLite persistence (volume-backed), and integration with Ansible Semaphore via internal Docker networking. A pluggable strategy pattern loads routing/startup logic from a `strategies/` directory, with hot-reload via bind-mounts in development.
+Hestia provides a single, smart gateway for client applications to access personal services across multiple machines. It determines the required service from the request, auto-starts it on the appropriate machine per rules, routes the request, and shuts down idle services. The gateway exposes a stable port (8080) and a transparent reverse-proxy under `/services/{serviceId}/...` so clients can point to `http://localhost:8080/services/<alias>` without code changes. The delivery approach is containerized (Docker + docker-compose), with a Python 3.12 FastAPI application, SQLite persistence (volume-backed), and integration with Ansible Semaphore via internal Docker networking. A pluggable strategy pattern loads routing/startup logic from a `strategies/` directory, with hot-reload via bind-mounts in development.
 
 ## Technical Context
 **Language/Version**: Python 3.12+  
@@ -39,7 +39,7 @@ Hestia provides a single, smart gateway for client applications to access person
 **Target Platform**: Linux via Docker and docker-compose  
 **Project Type**: Single backend service (Option 1: Single project)  
 **Performance Goals**: Gateway overhead target ≤ 200ms p95 for routed requests; cold-starts tolerated with request queueing; baseline cold start target: local ≤ 60s, remote/HPC ≤ 180s  
-**Constraints**: Transparent client experience; optional auth (API key for API, username/password for dashboard); idle shutdown configurable  
+**Constraints**: Transparent client experience via stable gateway `http://localhost:8080/services/{serviceId}/...`; optional auth (API key for API, username/password for dashboard); idle shutdown configurable  
 **Scale/Scope**: Single-user/operator with multiple services across 1-3 machines; dozens of services
 
 ## Constitution Check

@@ -65,6 +65,7 @@ A developer working on personal projects across multiple machines wants to acces
 3. **Given** a service has been idle for the configured timeout period, **When** the timeout expires, **Then** Hestia automatically shuts down the service
 4. **Given** multiple machines are available for a service type, **When** a request comes in, **Then** Hestia selects the appropriate machine based on pre-configured rules
 5. **Given** a client application needs to access services, **When** making requests, **Then** the client only needs to know Hestia's address and the process is transparent
+6. **Given** an unmodified client configured with a service-prefixed base URL, **When** it calls `http://localhost:8080/services/{serviceId}/...`, **Then** Hestia transparently proxies the request to the appropriate service and returns the response
 
 ### Edge Cases
 - What happens when a machine designated for a service is unavailable or unreachable?
@@ -93,6 +94,7 @@ A developer working on personal projects across multiple machines wants to acces
  - **FR-014**: System MUST support HTTP APIs only in this phase; other protocols are explicitly out of scope.
  - **FR-015**: System MUST determine service readiness via a configurable readiness check. Preferred: an HTTP health endpoint indicating success. If no health endpoint is provided, allow a fallback such as a fixed warm-up period before accepting requests. The readiness condition MUST be definable per service.
     - Recommendation: Where appropriate, allow additional readiness options such as a simple probe request or detecting a service-ready signal.
+- **FR-016**: System MUST expose a stable gateway on a single port (8080) and provide transparent, service-prefixed proxy paths at `/services/{serviceId}/...` to enable unmodified clients to integrate by changing only their base URL.
 
 ### Key Entities *(include if feature involves data)*
 - **Service**: Represents a backend service (LLM, database, API) with its configuration, resource requirements, and current state

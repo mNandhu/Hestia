@@ -28,6 +28,7 @@ This starts:
 - POST `http://localhost:8080/v1/requests` – transparent gateway (see contracts/openapi.yaml)
 - GET `http://localhost:8080/v1/services/{serviceId}/status` – service status
 - POST `http://localhost:8080/v1/services/{serviceId}/start` – proactive warm-up
+ - Transparent proxy (recommended for unmodified clients): `http://localhost:8080/services/{serviceId}/...`
 
 ## Testing
 ```sh
@@ -39,3 +40,6 @@ pytest -q
 
 ## Logs
 - Structured logs with configurable levels; see FR-013 for event types captured.
+
+## Example client base URLs
+- Ollama: set `OLLAMA_BASE_URL=http://localhost:8080/services/ollama` instead of `http://localhost:11434`

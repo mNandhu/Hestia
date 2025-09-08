@@ -5,6 +5,73 @@ info:
 servers:
   - url: http://localhost:8080
 paths:
+  /services/{serviceId}/{proxyPath}:
+    parameters:
+      - in: path
+        name: serviceId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: proxyPath
+        required: true
+        schema:
+          type: string
+        style: simple
+        explode: false
+    get:
+      summary: Transparent proxy GET to service path
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Proxied response
+    post:
+      summary: Transparent proxy POST to service path
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Proxied response
+    put:
+      summary: Transparent proxy PUT to service path
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Proxied response
+    patch:
+      summary: Transparent proxy PATCH to service path
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Proxied response
+    delete:
+      summary: Transparent proxy DELETE to service path
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Proxied response
   /v1/requests:
     post:
       summary: Dispatch a client HTTP request through Hestia to a target service
