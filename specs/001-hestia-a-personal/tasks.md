@@ -130,6 +130,7 @@ T021. [Source] Transparent proxy implementation
 T022. [Source] Generic POST `/v1/requests` dispatcher
 - Accept GatewayRequest, route to service, use queue/strategy engines
 - Dependencies: T003, T020
+ - Status: DONE (full dispatcher implementation with queue integration, service startup, comprehensive testing)
 
 T023. [Source] Service status and proactive start endpoints
 - GET status, POST start; integrate with readiness and queue

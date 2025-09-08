@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from urllib.parse import urljoin
 
@@ -9,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from hestia.config import load_config
 from hestia.persistence import init_database
 from hestia.request_queue import RequestQueue
+from hestia.models.gateway import GatewayRequest, GatewayResponse
 
 app = FastAPI(title="Hestia API")
 
@@ -29,9 +31,208 @@ def _get_config():
 
 
 @app.post("/v1/requests")
-def dispatch_request() -> Response:
-    # Stub implementation to satisfy contract tests
-    return Response(status_code=501)
+async def dispatch_request(gateway_request: GatewayRequest) -> GatewayResponse:
+    """
+    Generic dispatcher for routing HTTP requests through the gateway.
+    Handles cold service startup, queuing, and request forwarding.
+    """
+    _ensure_idle_monitor_started()
+
+    # Get service configuration
+    service_id = gateway_request.service_id
+    service_config = _get_config().services.get(service_id, _get_config().services["ollama"])
+
+    # Check if service is ready
+    service_state = _services.get(service_id, {})
+    is_service_ready = (
+        service_state.get("state") == "hot" and service_state.get("readiness") == "ready"
+    )
+
+    # If service is cold, queue the request and start the service
+    if not is_service_ready:
+        # Check if service startup is already in progress
+        if not _request_queue.is_service_starting(service_id):
+            # Mark service as starting to prevent duplicate startup attempts
+            if _request_queue.mark_service_starting(service_id):
+                # Start service asynchronously
+                asyncio.create_task(_start_service_async(service_id, service_config))
+
+        # Prepare request data for queuing
+        request_data = {
+            "method": gateway_request.method,
+            "path": gateway_request.path,
+            "headers": gateway_request.headers or {},
+            "body": gateway_request.body,
+        }
+
+        try:
+            # Queue the request and wait for service to be ready
+            await _request_queue.queue_request(
+                service_id=service_id,
+                request_data=request_data,
+                timeout_seconds=service_config.request_timeout_seconds,
+            )
+
+            # If we get here, service is ready, proceed with actual request
+
+        except Exception:
+            # Queue timeout or other error
+            return GatewayResponse(
+                status=503,
+                headers={"content-type": "application/json"},
+                body={"error": "Service unavailable"},
+            )
+
+    # Service is ready, perform the actual request
+    try:
+        response_data = await _perform_gateway_request(gateway_request, service_config)
+        return response_data
+    except Exception:
+        return GatewayResponse(
+            status=503,
+            headers={"content-type": "application/json"},
+            body={"error": "Request failed"},
+        )
+
+
+async def _perform_gateway_request(
+    gateway_request: GatewayRequest, service_config
+) -> GatewayResponse:
+    """Perform the actual HTTP request to the target service."""
+    base = service_config.base_url
+    target = urljoin(base.rstrip("/") + "/", gateway_request.path.lstrip("/"))
+
+    # Prepare request parameters
+    method = gateway_request.method.upper()
+    headers = gateway_request.headers or {}
+
+    # Remove hop-by-hop headers
+    hop_by_hop_headers = {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+        "host",
+    }
+    headers = {k: v for k, v in headers.items() if k.lower() not in hop_by_hop_headers}
+
+    # Prepare body content
+    body = None
+    if method in ["POST", "PUT", "PATCH"] and gateway_request.body is not None:
+        if isinstance(gateway_request.body, (dict, list)):
+            # JSON serialization
+            body = json.dumps(gateway_request.body).encode("utf-8")
+            headers["content-type"] = "application/json"
+        elif isinstance(gateway_request.body, str):
+            body = gateway_request.body.encode("utf-8")
+        elif isinstance(gateway_request.body, bytes):
+            body = gateway_request.body
+        else:
+            # Try to serialize as JSON
+            body = json.dumps(gateway_request.body).encode("utf-8")
+            headers["content-type"] = "application/json"
+
+    # Retry configuration
+    total_attempts = service_config.retry_count
+    if total_attempts < 1:
+        total_attempts = 1
+    retry_delay_ms = service_config.retry_delay_ms
+    fallback = service_config.fallback_url
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Try primary endpoint with retries
+        for attempt in range(total_attempts):
+            try:
+                upstream_response = await client.request(
+                    method=method, url=target, headers=headers, content=body, follow_redirects=False
+                )
+
+                # Mark activity for idle tracking
+                _touch(gateway_request.service_id)
+
+                # Prepare response headers
+                response_headers = dict(upstream_response.headers)
+                # Remove hop-by-hop headers from response
+                response_headers = {
+                    k: v for k, v in response_headers.items() if k.lower() not in hop_by_hop_headers
+                }
+
+                # Parse response body
+                response_body = None
+                content_type = upstream_response.headers.get("content-type", "").lower()
+
+                if "application/json" in content_type:
+                    try:
+                        response_body = upstream_response.json()
+                    except Exception:
+                        response_body = upstream_response.text
+                else:
+                    response_body = upstream_response.text
+
+                return GatewayResponse(
+                    status=upstream_response.status_code,
+                    headers=response_headers,
+                    body=response_body,
+                )
+
+            except Exception:
+                # If not last attempt, honor delay and retry
+                if attempt < (total_attempts - 1):
+                    if retry_delay_ms > 0:
+                        await asyncio.sleep(retry_delay_ms / 1000.0)
+                    continue
+                # else exit loop to try fallback (if any)
+                break
+
+        # Try fallback once if available
+        if fallback:
+            try:
+                fallback_target = urljoin(
+                    fallback.rstrip("/") + "/", gateway_request.path.lstrip("/")
+                )
+
+                upstream_response = await client.request(
+                    method=method,
+                    url=fallback_target,
+                    headers=headers,
+                    content=body,
+                    follow_redirects=False,
+                )
+
+                _touch(gateway_request.service_id)
+
+                response_headers = dict(upstream_response.headers)
+                response_headers = {
+                    k: v for k, v in response_headers.items() if k.lower() not in hop_by_hop_headers
+                }
+
+                # Parse response body
+                response_body = None
+                content_type = upstream_response.headers.get("content-type", "").lower()
+
+                if "application/json" in content_type:
+                    try:
+                        response_body = upstream_response.json()
+                    except Exception:
+                        response_body = upstream_response.text
+                else:
+                    response_body = upstream_response.text
+
+                return GatewayResponse(
+                    status=upstream_response.status_code,
+                    headers=response_headers,
+                    body=response_body,
+                )
+
+            except Exception:
+                pass
+
+    # All attempts failed
+    raise Exception("All request attempts failed")
 
 
 @app.get("/v1/services/{serviceId}/status")
