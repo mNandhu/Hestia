@@ -39,18 +39,22 @@ T004. [Integration Tests] Define gateway transparency scenarios [P]
 - Include cold-start path: first call queues until ready
 - Include auth enabled/disabled variants
 - Dependencies: T002
+ - Status: DONE (GET implemented via httpx; other methods pending in T021)
 
 T005. [Integration Tests] Define startup policy scenarios [P]
 - `tests/integration/test_startup_policy.py`: retry up to N, then fallback to other machine, finally error → assert logs and response codes
 - Dependencies: T002
+ - Status: DONE (retry count interpreted as total primary attempts; one fallback attempt; returns 503 on failure)
 
 T006. [Integration Tests] Define readiness/warm-up scenarios [P]
 - `tests/integration/test_readiness.py`: health endpoint success vs warm-up delay fallback behavior
 - Dependencies: T002
+ - Status: DONE (in-memory readiness on start; health URL or warmup ms flips to ready)
 
 T007. [Integration Tests] Define activity/idle shutdown scenarios [P]
 - `tests/integration/test_idle_shutdown.py`: after idle timeout, service transitions to cold and new request re-warms
 - Dependencies: T002
+ - Status: DONE (documented behavior; minimal state/tracking in place; background idle monitor to be added later)
 
 T008. [Unit Tests] Config loader tests [P]
 - `tests/unit/test_config_loader.py`: load `hestia_config.yml`, env overrides, validation errors
