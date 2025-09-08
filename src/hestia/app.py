@@ -6,11 +6,15 @@ from fastapi import FastAPI, Response
 
 from hestia.config import load_config
 from hestia.persistence import init_database
+from hestia.request_queue import RequestQueue
 
 app = FastAPI(title="Hestia API")
 
 # Initialize database on startup
 init_database()
+
+# Initialize request queue
+_request_queue = RequestQueue()
 
 # In-memory minimal state for readiness/idle tracking (per-service)
 _services: dict[str, dict] = {}

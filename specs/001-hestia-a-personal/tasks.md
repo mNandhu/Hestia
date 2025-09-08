@@ -120,6 +120,7 @@ T019. [Source] Startup policy engine
 T020. [Source] Request queue for cold services
 - FIFO, bounded size, per-service timeouts; prevent duplicate startups
 - Dependencies: T004, T019
+ - Status: DONE (FIFO queue with bounded size, timeouts, duplicate startup prevention, config integration)
 
 T021. [Source] Transparent proxy implementation
 - Implement proxy for `/services/{serviceId}/{proxyPath}` using httpx; preserve method, headers, body; stream response

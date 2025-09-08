@@ -13,6 +13,9 @@ class ServiceConfig(BaseModel):
     warmup_ms: int = Field(default=0, ge=0)
     idle_timeout_ms: int = Field(default=0, ge=0)
     fallback_url: Optional[str] = None
+    # Request queue configuration
+    queue_size: int = Field(default=100, ge=1)
+    request_timeout_seconds: int = Field(default=60, ge=1)
 
     @field_validator("retry_count")
     @classmethod
@@ -74,13 +77,22 @@ def load_config(config_path: str = "hestia_config.yml") -> HestiaConfig:
         "OLLAMA_WARMUP_MS": "warmup_ms",
         "OLLAMA_IDLE_TIMEOUT_MS": "idle_timeout_ms",
         "OLLAMA_FALLBACK_URL": "fallback_url",
+        "OLLAMA_QUEUE_SIZE": "queue_size",
+        "OLLAMA_REQUEST_TIMEOUT_SECONDS": "request_timeout_seconds",
     }
 
     for env_var, config_key in env_mappings.items():
         env_value = os.getenv(env_var)
         if env_value is not None:
             # Convert to appropriate type
-            if config_key in ["retry_count", "retry_delay_ms", "warmup_ms", "idle_timeout_ms"]:
+            if config_key in [
+                "retry_count",
+                "retry_delay_ms",
+                "warmup_ms",
+                "idle_timeout_ms",
+                "queue_size",
+                "request_timeout_seconds",
+            ]:
                 try:
                     ollama_config[config_key] = int(env_value)
                 except ValueError:
