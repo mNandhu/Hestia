@@ -4,8 +4,8 @@ from .base import Base
 
 
 class Service(Base):
-    __tablename__ = 'services'
-    
+    __tablename__ = "services"
+
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
     strategy = Column(String, nullable=False)
@@ -15,6 +15,6 @@ class Service(Base):
     auth_required = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    
+
     def __repr__(self):
         return f"<Service(id='{self.id}', name='{self.name}', strategy='{self.strategy}')>"

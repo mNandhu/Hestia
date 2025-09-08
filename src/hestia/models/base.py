@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 Base = declarative_base()
 
+
 def create_session(database_url: str = "sqlite:///hestia.db"):
     """Create a database session."""
     engine = create_engine(database_url)
