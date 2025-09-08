@@ -64,10 +64,12 @@ T008. [Unit Tests] Config loader tests [P]
 T009. [Unit Tests] Strategy loader tests [P]
 - `tests/unit/test_strategy_loader.py`: discover/load from `strategies/`, prevent duplicate registrations
 - Dependencies: T002
+ - Status: DONE (thread-safe singleton registry with importlib-based discovery)
 
 T010. [Unit Tests] Data model tests [P]
 - `tests/unit/test_models.py`: SQLAlchemy models and constraints from `data-model.md`
 - Dependencies: T002
+ - Status: DONE (comprehensive tests for all models: Service, Machine, RoutingRule, Activity, AuthKey)
 
 T011. [Infra] Dockerfile (multi-stage) and docker-compose (hestia + semaphore)
 - Compose: port 8080, named volumes `hestia_sqlite`, `semaphore_data`, bind-mount `strategies/` and `hestia_config.yml`
@@ -93,6 +95,7 @@ T014. [Source] Config loader implementation
 T015. [Source] SQLAlchemy models per `data-model.md`
 - Tables: Service, Machine, RoutingRule, Activity, AuthKey
 - Dependencies: T010
+ - Status: DONE (all models implemented with proper relationships, enums, JSON fields)
 
 T016. [Source] Persistence provider (SQLite) and initialization
 - Create engine, session management, migrations bootstrap (if needed)
@@ -101,6 +104,7 @@ T016. [Source] Persistence provider (SQLite) and initialization
 T017. [Source] Strategy plugin loader
 - Load from `strategies/` via importlib; registry with thread-safe singleton
 - Dependencies: T009
+ - Status: DONE (thread-safe singleton registry with importlib discovery and graceful error handling)
 
 T018. [Source] Readiness checker
 - Health endpoint polling; warm-up delay fallback per service
