@@ -148,12 +148,14 @@ T026. [Integration] Semaphore API client and mocks
 - Dependencies: T003, T022
 
 T027. [CI/CD] GitHub Actions: lint and format
-- Ruff + Black on push to main
+- Ruff on push to main
 - Dependencies: T002
+- Status: Done (lint.yml with ruff lint and format checks)
 
 T028. [CI/CD] GitHub Actions: tests
 - Install deps and run `pytest`
 - Dependencies: T002, T003
+- Status: Done (test.yml with full test suite run on push to main)
 
 T029. [Docs] Example `strategies/` and `hestia_config.yml`
 - Provide placeholders and comments for customization
