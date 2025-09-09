@@ -175,9 +175,83 @@ T031. [Docs] Authentication documentation
 - Include examples for different auth methods and troubleshooting guide
 - Dependencies: T024
 
+---
+
+## Strategy-based Routing (Service-agnostic)
+
+Context: Hestia supports plugin strategies discovered from `strategies/` (see T017). Routing must remain service-agnostic: Hestia is not specific to Ollama. Each service can opt into its own strategy and rules (e.g., model-aware routing for LLMs, region-aware for others). Strategies select an upstream base URL per-request via a `request_context` derived from the incoming request.
+
+T032. [Spec/Design] Strategy routing requirements and config schema
+- Define service-agnostic config keys in `hestia_config.yml`:
+	- `services.<id>.instances: [ { url, weight?, region? } ]`
+	- `services.<id>.strategy: <name>` (optional, default none)
+	- `services.<id>.routing.by_model: { <key>: <instance_url> }` (example strategy-specific mapping)
+- Document how `request_context` is constructed (path, headers, body fields like `model`, query params).
+- Dependencies: T017, T014
+ - Status: TODO
+
+T033. [Tests] Integration tests for strategy-based routing [P]
+- Add `tests/integration/test_strategy_routing.py`:
+	- Given instances A/B and `routing.by_model` mapping, requests with model=X route to A, model=Y to B.
+	- When no mapping matches, fallback to load balancer selection.
+	- Use `respx` to assert correct upstream URLs are called (no hardcoded Ollama assumptions; use generic `serviceId`).
+- Dependencies: T032
+ - Status: TODO
+
+T034. [Source] Load strategies on startup and wire into request path
+- In `src/hestia/app.py`, load strategies at startup (`load_strategies("strategies")`) and keep a registry reference.
+- In dispatcher (`POST /v1/requests`) and transparent proxy, before constructing target URL:
+	- Build `request_context` (e.g., parsed JSON body fields including `model`, headers, query params, path).
+	- Resolve upstream base URL via configured strategy:
+		- If `routing.by_model` exists, prefer exact match.
+		- Else call `load_balancer.get_next_instance(service_id, request_context)`.
+		- Fallback to `service_config.base_url` if none.
+- Dependencies: T017, T032
+ - Status: TODO
+
+T035. [Source] Provide a minimal model-aware router strategy (example)
+- Add `strategies/model_router.py` with `register_strategy(registry)`:
+	- `route_request(service_id, request_context, config)` returns instance URL based on arbitrary mapping (e.g., `by_model`).
+	- Delegates to load balancer when no direct hit.
+- Keep generic; do not assume Ollama-specific shapes beyond a configurable key name (default `model`).
+- Dependencies: T017, T032
+ - Status: TODO
+
+T036. [Config/Docs] Extend examples for strategies and routing
+- Update example `hestia_config.yml` to include `instances` and `routing` blocks.
+- Document service-agnostic patterns in `strategies/README.md` with a short example.
+- Dependencies: T032, T035
+ - Status: TODO
+
+T037. [Tests] Health/fallback and LB integration [P]
+- Integration tests:
+	- When chosen instance is down (respx 503/timeout), mark unhealthy and next request selects alternative.
+	- Ensure instance recovery toggles health back to healthy on 200.
+- Dependencies: T033, T034
+ - Status: TODO
+
+T038. [Source] Observability for routing
+- Add structured logs and metrics for routing decisions:
+	- Which strategy selected, selected instance URL, reason (mapping hit / LB / fallback).
+	- Counters per strategy and per service.
+- Dependencies: T025, T034
+ - Status: TODO
+
+T039. [Docs] Quickstart and spec updates
+- Update `specs/001-hestia-a-personal/quickstart.md` with routing examples.
+- Update `contracts` or notes if we expose any strategy inspection endpoints (optional).
+- Dependencies: T033, T034
+ - Status: TODO
+
+T040. [Optional] Strategy inspection endpoint [P]
+- Add `/v1/strategies` listing loaded strategies and per-service strategy configuration (read-only).
+- Dependencies: T017
+ - Status: TODO
+
 ## Parallelization Guide
 - [P] T003, T004, T005, T006, T007, T008, T009, T010 can run in parallel after T002
 - [P] T027 and T028 can run in parallel after T002
+- [P] T033, T037, T040 can run in parallel with source work after T032
 
 ## Suggested Task Agent Commands
 - tasks run T003
