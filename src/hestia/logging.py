@@ -125,6 +125,32 @@ class StructuredFormatter(logging.Formatter):
         return json.dumps(log_entry, default=str)
 
 
+class SafeStreamHandler(logging.StreamHandler):
+    """StreamHandler that gracefully handles closed streams during shutdown."""
+
+    def emit(self, record):
+        """Emit a record, handling closed stream errors gracefully."""
+        try:
+            # Check if stream is still available before attempting to write
+            if hasattr(self.stream, "closed") and self.stream.closed:
+                return
+
+            # Proceed with normal emission
+            super().emit(record)
+        except (ValueError, OSError, AttributeError) as e:
+            # Handle cases where output streams are closed or unavailable
+            error_msg = str(e).lower()
+            if any(
+                phrase in error_msg
+                for phrase in ["closed file", "bad file descriptor", "i/o operation on closed file"]
+            ):
+                # Silently ignore logging to closed streams during shutdown
+                return
+            else:
+                # Re-raise other exceptions that aren't stream closure related
+                raise
+
+
 class HestiaLogger:
     """Structured logger for Hestia Gateway."""
 
@@ -138,8 +164,8 @@ class HestiaLogger:
         for handler in self.logger.handlers[:]:
             self.logger.removeHandler(handler)
 
-        # Create console handler with structured formatter
-        handler = logging.StreamHandler(sys.stdout)
+        # Create console handler with structured formatter using our safe handler
+        handler = SafeStreamHandler(sys.stdout)
         handler.setFormatter(StructuredFormatter())
         self.logger.addHandler(handler)
 
@@ -179,8 +205,18 @@ class HestiaLogger:
         if kwargs:
             extra["extra_fields"] = kwargs
 
-        # Log the message
-        getattr(self.logger, level.value.lower())(message, extra=extra)
+        # Log the message with error handling for closed streams
+        try:
+            getattr(self.logger, level.value.lower())(message, extra=extra)
+        except (ValueError, OSError) as e:
+            # Handle cases where output streams are closed (e.g., during pytest shutdown)
+            # This prevents "I/O operation on closed file" errors from background threads
+            if "closed file" in str(e) or "Bad file descriptor" in str(e):
+                # Silently ignore logging to closed streams during shutdown
+                pass
+            else:
+                # Re-raise other ValueError/OSError exceptions that aren't stream-related
+                raise
 
     def debug(self, message: str, **kwargs):
         """Log debug message."""
@@ -275,32 +311,53 @@ class HestiaLogger:
         if reason:
             message += f" (reason: {reason})"
 
+        # Merge metadata from kwargs
+        base_meta = {"stop_reason": reason} if reason else {}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            if base_meta:
+                base_meta.update(extra_meta)
+            else:
+                base_meta = extra_meta
+
         self.log_event(
             EventType.SERVICE_STOP,
             message,
             service_id=service_id,
-            metadata={"stop_reason": reason} if reason else None,
+            metadata=base_meta if base_meta else None,
             **kwargs,
         )
 
     def log_service_error(self, service_id: str, error: Union[str, Exception], **kwargs):
         """Log service error event."""
         error_msg = str(error)
+        # Merge metadata
+        base_meta = {"error": error_msg}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            base_meta.update(extra_meta)
+
         self.log_event(
             EventType.SERVICE_ERROR,
             f"Service error: {service_id} - {error_msg}",
             service_id=service_id,
-            metadata={"error": error_msg},
+            metadata=base_meta,
             **kwargs,
         )
 
     def log_service_state_change(self, service_id: str, old_state: str, new_state: str, **kwargs):
         """Log service state change event."""
+        # Merge metadata
+        base_meta = {"old_state": old_state, "new_state": new_state}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            base_meta.update(extra_meta)
+
         self.log_event(
             EventType.SERVICE_STATE_CHANGE,
             f"Service state change: {service_id} {old_state} -> {new_state}",
             service_id=service_id,
-            metadata={"old_state": old_state, "new_state": new_state},
+            metadata=base_meta,
             **kwargs,
         )
 
@@ -312,23 +369,36 @@ class HestiaLogger:
         if queue_size is not None:
             message += f" (queue size: {queue_size})"
 
+        base_meta = {"queue_size": queue_size} if queue_size is not None else {}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            if base_meta:
+                base_meta.update(extra_meta)
+            else:
+                base_meta = extra_meta
+
         self.log_event(
             event_type,
             message,
             service_id=service_id,
-            metadata={"queue_size": queue_size} if queue_size is not None else None,
+            metadata=base_meta if base_meta else None,
             **kwargs,
         )
 
     def log_proxy_start(self, service_id: str, target_url: str, method: str, path: str, **kwargs):
         """Log proxy start event."""
+        base_meta = {"target_url": target_url}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            base_meta.update(extra_meta)
+
         self.log_event(
             EventType.PROXY_START,
             f"Proxying {method} {path} to {target_url}",
             service_id=service_id,
             method=method,
             path=path,
-            metadata={"target_url": target_url},
+            metadata=base_meta,
             **kwargs,
         )
 
@@ -336,13 +406,18 @@ class HestiaLogger:
         self, service_id: str, target_url: str, status_code: int, duration_ms: float, **kwargs
     ):
         """Log proxy end event."""
+        base_meta = {"target_url": target_url}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            base_meta.update(extra_meta)
+
         self.log_event(
             EventType.PROXY_END,
             f"Proxy response from {target_url}: {status_code} ({duration_ms:.1f}ms)",
             service_id=service_id,
             status_code=status_code,
             duration_ms=duration_ms,
-            metadata={"target_url": target_url},
+            metadata=base_meta,
             **kwargs,
         )
 
@@ -363,12 +438,17 @@ class HestiaLogger:
             EventType.HEALTH_CHECK if status == "healthy" else EventType.HEALTH_CHECK_FAILED
         )
 
+        base_meta = {"health_url": url, "health_status": status}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            base_meta.update(extra_meta)
+
         self.log_event(
             event_type,
             message,
             service_id=service_id,
             duration_ms=response_time_ms,
-            metadata={"health_url": url, "health_status": status},
+            metadata=base_meta,
             **kwargs,
         )
 

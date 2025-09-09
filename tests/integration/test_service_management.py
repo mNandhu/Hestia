@@ -1,4 +1,4 @@
-import time
+import respx
 from fastapi.testclient import TestClient
 
 from hestia.app import app
@@ -30,8 +30,6 @@ def test_service_status_after_activity(monkeypatch):
 
     # Simulate service activity by calling the transparent proxy
     # This will put the service in hot/ready state
-    import respx
-
     with respx.mock() as mock:
         mock.get("http://upstream.local/v1/models").respond(200, json={"models": []})
 
@@ -69,8 +67,6 @@ def test_start_service_already_running(monkeypatch):
 
     # Arrange: Set up a service and make it hot
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://upstream.local")
-
-    import respx
 
     with respx.mock() as mock:
         mock.get("http://upstream.local/v1/models").respond(200, json={"models": []})
@@ -131,6 +127,8 @@ def test_service_status_shows_queue_pending(monkeypatch):
     thread.start()
 
     # Give a moment for request to be queued
+    import time
+
     time.sleep(0.1)
 
     # Check status while request is queued
@@ -201,3 +199,34 @@ def test_service_status_json_structure():
     # Validate enum values
     assert data["state"] in ["hot", "cold", "starting", "stopping"]
     assert data["readiness"] in ["ready", "not_ready"]
+
+
+def test_status_reports_hot_if_upstream_running_without_proxy(monkeypatch):
+    """If upstream is already running (health OK), status should be hot even before any proxy request.
+
+    Scenario: User has Ollama already running locally before starting Hestia. On first status check,
+    Hestia should detect readiness via the configured health_url and report hot/ready without requiring
+    a transparent proxy request to trigger state change.
+    """
+    client = TestClient(app)
+
+    # Use a unique service id to avoid global state contamination from other tests
+    service_id = "ollama-prehot"
+
+    # Arrange: Configure upstream to a mock and set health URL (applies to ollama defaults)
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://upstream.local")
+    monkeypatch.setenv("OLLAMA_HEALTH_URL", "http://upstream.local/api/tags")
+
+    with respx.mock() as mock:
+        # Health endpoint returns 200 to indicate upstream is ready
+        mock.get("http://upstream.local/api/tags").respond(200, json={"ok": True})
+
+        # Act: Call status endpoint BEFORE any proxy request
+        resp = client.get(f"/v1/services/{service_id}/status")
+
+    # Assert: Expect hot/ready immediately
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["serviceId"] == service_id
+    assert data["state"] == "hot"
+    assert data["readiness"] == "ready"

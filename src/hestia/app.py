@@ -255,10 +255,38 @@ def get_service_status(serviceId: str) -> ServiceStatus:
     """Get current status of a service including state, readiness, and queue information."""
     _ensure_idle_monitor_started()
 
+    # Load service config (to access health_url for proactive readiness detection)
+    service_config = _get_config().services.get(serviceId, _get_config().services["ollama"])
+
     # Get service state from in-memory store
     service_state = _services.get(serviceId, {})
     state = service_state.get("state", "cold")
     readiness = service_state.get("readiness", "not_ready")
+
+    # If service appears cold/not_ready but a health_url is configured, probe it once here
+    # to reflect the true state when the upstream is already running before any proxy usage.
+    if not (state == "hot" and readiness == "ready") and service_config.health_url:
+        try:
+            resp = httpx.get(service_config.health_url, timeout=2.0)
+            if resp.status_code == 200:
+                # Mark service as hot/ready
+                now_ms = int(time.time() * 1000)
+                svc = _services.setdefault(serviceId, {})
+                svc["state"] = "hot"
+                svc["readiness"] = "ready"
+                svc["last_used_ms"] = now_ms
+                state = "hot"
+                readiness = "ready"
+
+                # Clear any starting flag in the queue since service is effectively ready
+                if _request_queue.is_service_starting(serviceId):
+                    _request_queue.mark_service_ready(serviceId)
+
+                # Log detection of ready state
+                logger.log_service_ready(serviceId)
+        except Exception:
+            # Ignore health probe errors; keep reported state as-is
+            pass
 
     # Get queue information
     queue_status = _request_queue.get_queue_status(serviceId)
