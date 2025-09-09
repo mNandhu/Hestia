@@ -135,6 +135,7 @@ T022. [Source] Generic POST `/v1/requests` dispatcher
 T023. [Source] Service status and proactive start endpoints
 - GET status, POST start; integrate with readiness and queue
 - Dependencies: T003, T018, T019
+ - Status: DONE (comprehensive service management API with status reporting, proactive startup, queue integration)
 
 T024. [Source] Optional auth middleware
 - API key for API; dashboard username/password stub; warnings when disabled

@@ -37,5 +37,10 @@ class ServiceStatus(BaseModel):
         default=None, alias="machineId", description="Current machine hosting the service"
     )
     readiness: str = Field(..., description="Service readiness: ready, not_ready")
+    queue_pending: Optional[int] = Field(
+        default=None,
+        alias="queuePending",
+        description="Number of requests pending in queue for this service",
+    )
 
     model_config = ConfigDict(populate_by_name=True)

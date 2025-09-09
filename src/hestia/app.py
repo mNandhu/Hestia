@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from hestia.config import load_config
 from hestia.persistence import init_database
 from hestia.request_queue import RequestQueue
-from hestia.models.gateway import GatewayRequest, GatewayResponse
+from hestia.models.gateway import GatewayRequest, GatewayResponse, ServiceStatus
 
 app = FastAPI(title="Hestia API")
 
@@ -236,44 +236,77 @@ async def _perform_gateway_request(
 
 
 @app.get("/v1/services/{serviceId}/status")
-def get_status(serviceId: str):
-    state = _services.get(serviceId, {"state": "cold", "readiness": "not_ready"})
-    return _json(state)
+def get_service_status(serviceId: str) -> ServiceStatus:
+    """Get current status of a service including state, readiness, and queue information."""
+    _ensure_idle_monitor_started()
+
+    # Get service state from in-memory store
+    service_state = _services.get(serviceId, {})
+    state = service_state.get("state", "cold")
+    readiness = service_state.get("readiness", "not_ready")
+
+    # Get queue information
+    queue_status = _request_queue.get_queue_status(serviceId)
+
+    # Determine if service is starting based on queue state
+    if _request_queue.is_service_starting(serviceId):
+        state = "starting"
+
+    return ServiceStatus(
+        serviceId=serviceId,
+        state=state,
+        machineId="local",  # For now, always local machine
+        readiness=readiness,
+        queuePending=queue_status.get("pending_requests", 0),
+    )
 
 
 @app.post("/v1/services/{serviceId}/start")
-def start_service(serviceId: str):
+async def start_service_proactively(serviceId: str) -> Response:
+    """Proactively start a service if it's not already running."""
     _ensure_idle_monitor_started()
-    # Initialize service state
-    now_ms = int(time.time() * 1000)
-    svc = _services.setdefault(
-        serviceId, {"state": "starting", "readiness": "not_ready", "last_used_ms": now_ms}
-    )
-    svc["state"] = "starting"
-    svc["readiness"] = "not_ready"
-    svc["last_used_ms"] = now_ms
 
-    health_url = _get_config().services.get(serviceId, _get_config().services["ollama"]).health_url
-    warmup_ms = _get_config().services.get(serviceId, _get_config().services["ollama"]).warmup_ms
+    # Check current service state
+    service_state = _services.get(serviceId, {})
+    current_state = service_state.get("state", "cold")
+    current_readiness = service_state.get("readiness", "not_ready")
 
-    # Background: poll health or wait warmup
-    if health_url:
-        try:
-            with httpx.Client(timeout=5.0) as client:
-                resp = client.get(health_url)
-                if resp.status_code == 200:
-                    svc["readiness"] = "ready"
-                    svc["state"] = "hot"
-        except Exception:
-            # keep not_ready
-            pass
+    # If service is already hot and ready, return 409 Conflict
+    if current_state == "hot" and current_readiness == "ready":
+        return Response(
+            status_code=409,
+            content='{"message": "Service is already running"}',
+            media_type="application/json",
+        )
+
+    # If service is already starting, return 409 Conflict
+    if _request_queue.is_service_starting(serviceId):
+        return Response(
+            status_code=409,
+            content='{"message": "Service is already starting"}',
+            media_type="application/json",
+        )
+
+    # Start the service
+    service_config = _get_config().services.get(serviceId, _get_config().services["ollama"])
+
+    # Mark service as starting
+    if _request_queue.mark_service_starting(serviceId):
+        # Start service asynchronously
+        asyncio.create_task(_start_service_async(serviceId, service_config))
+
+        return Response(
+            status_code=202,
+            content='{"message": "Service start initiated"}',
+            media_type="application/json",
+        )
     else:
-        if warmup_ms > 0:
-            time.sleep(warmup_ms / 1000.0)
-        svc["readiness"] = "ready"
-        svc["state"] = "hot"
-
-    return Response(status_code=202)
+        # Another process is already starting the service
+        return Response(
+            status_code=409,
+            content='{"message": "Service is already starting"}',
+            media_type="application/json",
+        )
 
 
 # Transparent proxy path supports multiple methods
