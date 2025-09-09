@@ -62,6 +62,26 @@ def _get_strategy_instance(name: str):
         return None
 
 
+def _mark_instance_healthy_on_success(service_id: str, instance_url: str):
+    """Mark an instance as healthy after a successful request."""
+    lb = _get_strategy_instance("load_balancer")
+    if lb and hasattr(lb, "mark_instance_healthy"):
+        try:
+            lb.mark_instance_healthy(service_id, instance_url)
+        except Exception:
+            pass
+
+
+def _mark_instance_unhealthy_on_error(service_id: str, instance_url: str, error: Exception):
+    """Mark an instance as unhealthy after a failed request."""
+    lb = _get_strategy_instance("load_balancer")
+    if lb and hasattr(lb, "mark_instance_unhealthy"):
+        try:
+            lb.mark_instance_unhealthy(service_id, instance_url, error)
+        except Exception:
+            pass
+
+
 def _build_request_context_from_gateway(gateway_request: GatewayRequest) -> dict:
     ctx = {
         "method": gateway_request.method,
@@ -100,10 +120,15 @@ async def _build_request_context_from_proxy(request: Request, proxyPath: str) ->
     return ctx
 
 
-def _resolve_upstream_base(service_id: str, service_config, request_context: dict) -> str:
+def _resolve_upstream_base(
+    service_id: str, service_config, request_context: dict
+) -> tuple[str, str]:
     """Resolve upstream base URL using configured strategy or fallback to base_url.
 
     Strategy contract: strategy.route_request(service_id, request_context, config) -> Optional[str]
+
+    Returns:
+        Tuple of (base_url, resolution_reason) for observability
     """
     # Strategy-based resolution
     strategy_name = getattr(service_config, "strategy", None)
@@ -113,7 +138,7 @@ def _resolve_upstream_base(service_id: str, service_config, request_context: dic
             try:
                 url = strategy.route_request(service_id, request_context, service_config)
                 if isinstance(url, str) and url:
-                    return url
+                    return url, f"strategy:{strategy_name}"
             except Exception:
                 # Ignore strategy errors and fallback
                 pass
@@ -128,11 +153,11 @@ def _resolve_upstream_base(service_id: str, service_config, request_context: dic
                 lb.register_service_instances(service_id, instances)
                 picked = lb.get_next_instance(service_id, request_context)
                 if isinstance(picked, str) and picked:
-                    return picked
+                    return picked, "load_balancer"
             except Exception:
                 pass
 
-    return service_config.base_url
+    return service_config.base_url, "base_url"
 
 
 @app.post("/v1/requests")
@@ -206,8 +231,25 @@ async def _perform_gateway_request(
     """Perform the actual HTTP request to the target service."""
     # Resolve base via strategy
     req_ctx = _build_request_context_from_gateway(gateway_request)
-    base = _resolve_upstream_base(gateway_request.service_id, service_config, req_ctx)
+    base, resolution_reason = _resolve_upstream_base(
+        gateway_request.service_id, service_config, req_ctx
+    )
     target = urljoin(base.rstrip("/") + "/", gateway_request.path.lstrip("/"))
+
+    # Log routing decision for observability
+    logger.info(
+        f"Routing decision for {gateway_request.service_id}",
+        event_type=EventType.PROXY_START,
+        service_id=gateway_request.service_id,
+        target_url=base,
+        resolution_reason=resolution_reason,
+        path=gateway_request.path,
+    )
+    metrics.increment_counter(
+        "routing_decisions_total",
+        service_id=gateway_request.service_id,
+        labels={"reason": resolution_reason},
+    )
 
     # Prepare request parameters
     method = gateway_request.method.upper()
@@ -261,6 +303,18 @@ async def _perform_gateway_request(
                 # Mark activity for idle tracking
                 _touch(gateway_request.service_id)
 
+                # Check if response indicates a healthy service (2xx-4xx) vs unhealthy (5xx)
+                if 200 <= upstream_response.status_code < 500:
+                    # Mark instance as healthy for successful responses (including 4xx client errors)
+                    _mark_instance_healthy_on_success(gateway_request.service_id, base)
+                else:
+                    # Mark instance as unhealthy for 5xx server errors
+                    _mark_instance_unhealthy_on_error(
+                        gateway_request.service_id,
+                        base,
+                        Exception(f"HTTP {upstream_response.status_code}"),
+                    )
+
                 # Prepare response headers
                 response_headers = dict(upstream_response.headers)
                 # Remove hop-by-hop headers from response
@@ -280,13 +334,24 @@ async def _perform_gateway_request(
                 else:
                     response_body = upstream_response.text
 
+                # For 5xx errors, continue to retry/fallback instead of returning immediately
+                if upstream_response.status_code >= 500:
+                    if attempt < (total_attempts - 1):
+                        if retry_delay_ms > 0:
+                            await asyncio.sleep(retry_delay_ms / 1000.0)
+                        continue
+                    # If last attempt, will fall through to fallback logic
+
                 return GatewayResponse(
                     status=upstream_response.status_code,
                     headers=response_headers,
                     body=response_body,
                 )
 
-            except Exception:
+            except Exception as e:
+                # Mark instance as unhealthy if using load balancer
+                _mark_instance_unhealthy_on_error(gateway_request.service_id, base, e)
+
                 # If not last attempt, honor delay and retry
                 if attempt < (total_attempts - 1):
                     if retry_delay_ms > 0:
@@ -397,6 +462,51 @@ def get_service_status(serviceId: str) -> ServiceStatus:
         readiness=readiness,
         queuePending=queue_status.get("pending_requests", 0),
     )
+
+
+@app.get("/v1/strategies")
+def get_strategies_endpoint():
+    """Get information about loaded strategies and per-service configuration."""
+    config = _get_config()
+
+    # Get loaded strategies
+    loaded_strategies = {}
+    for strategy_name in _strategy_registry.list_strategies():
+        try:
+            strategy = _get_strategy_instance(strategy_name)
+            if strategy and hasattr(strategy, "get_strategy_info"):
+                loaded_strategies[strategy_name] = strategy.get_strategy_info()
+            else:
+                loaded_strategies[strategy_name] = {
+                    "name": strategy_name,
+                    "description": "No strategy info available",
+                    "version": "unknown",
+                }
+        except Exception:
+            loaded_strategies[strategy_name] = {
+                "name": strategy_name,
+                "error": "Failed to load strategy info",
+            }
+
+    # Get per-service strategy configuration
+    service_strategies = {}
+    for service_id, service_config in config.services.items():
+        strategy_name = getattr(service_config, "strategy", None)
+        instances = getattr(service_config, "instances", [])
+        routing = getattr(service_config, "routing", {})
+
+        if strategy_name or instances or routing:
+            service_strategies[service_id] = {
+                "strategy": strategy_name,
+                "instances": instances,
+                "routing": routing,
+                "base_url": service_config.base_url,
+            }
+
+    return {
+        "loaded_strategies": loaded_strategies,
+        "service_configurations": service_strategies,
+    }
 
 
 @app.get("/v1/metrics")
@@ -552,8 +662,23 @@ async def _perform_proxy_request(
     """Perform the actual proxy request to the upstream service."""
     # Resolve base via strategy
     req_ctx = await _build_request_context_from_proxy(request, proxyPath)
-    base = _resolve_upstream_base(serviceId, service_config, req_ctx)
+    base, resolution_reason = _resolve_upstream_base(serviceId, service_config, req_ctx)
     target = urljoin(base.rstrip("/") + "/", proxyPath)
+
+    # Log routing decision for observability
+    logger.info(
+        f"Routing decision for {serviceId}",
+        event_type=EventType.PROXY_START,
+        service_id=serviceId,
+        target_url=base,
+        resolution_reason=resolution_reason,
+        path=proxyPath,
+    )
+    metrics.increment_counter(
+        "routing_decisions_total",
+        service_id=serviceId,
+        labels={"reason": resolution_reason},
+    )
 
     # Start timing
     start_time = time.time()
@@ -611,6 +736,16 @@ async def _perform_proxy_request(
                 # Mark activity for idle tracking
                 _touch(serviceId)
 
+                # Check if response indicates a healthy service (2xx-4xx) vs unhealthy (5xx)
+                if 200 <= upstream_response.status_code < 500:
+                    # Mark instance as healthy for successful responses (including 4xx client errors)
+                    _mark_instance_healthy_on_success(serviceId, base)
+                else:
+                    # Mark instance as unhealthy for 5xx server errors
+                    _mark_instance_unhealthy_on_error(
+                        serviceId, base, Exception(f"HTTP {upstream_response.status_code}")
+                    )
+
                 # Calculate proxy duration and log
                 duration_ms = (time.time() - start_time) * 1000
                 logger.log_proxy_end(serviceId, target, upstream_response.status_code, duration_ms)
@@ -628,6 +763,14 @@ async def _perform_proxy_request(
                     k: v for k, v in response_headers.items() if k.lower() not in hop_by_hop_headers
                 }
 
+                # For 5xx errors, continue to retry/fallback instead of returning immediately
+                if upstream_response.status_code >= 500:
+                    if attempt < (total_attempts - 1):
+                        if retry_delay_ms > 0:
+                            await asyncio.sleep(retry_delay_ms / 1000.0)
+                        continue
+                    # If last attempt, will fall through to fallback logic
+
                 # Handle streaming responses
                 if _should_stream_response(upstream_response):
                     return StreamingResponse(
@@ -644,7 +787,10 @@ async def _perform_proxy_request(
                         media_type=upstream_response.headers.get("content-type"),
                     )
 
-            except Exception:
+            except Exception as e:
+                # Mark instance as unhealthy if using load balancer
+                _mark_instance_unhealthy_on_error(serviceId, base, e)
+
                 # If not last attempt, honor delay and retry
                 if attempt < (total_attempts - 1):
                     if retry_delay_ms > 0:

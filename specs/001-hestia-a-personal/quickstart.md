@@ -248,6 +248,84 @@ Track requests across the system using the `request_id` field.
 1. **Configure your services** in `hestia_config.yml`
 2. **Set client base URLs** to use Hestia proxy  
 3. **Enable authentication** for production deployment
+
+## Strategy-based Routing
+
+Hestia supports strategy-based routing to distribute requests across multiple instances:
+
+### Model-aware Routing
+Configure different models to route to different instances:
+
+```yaml
+# hestia_config.yml
+services:
+  my-llm:
+    base_url: "http://fallback-llm:11434"
+    strategy: "model_router"
+    instances:
+      - { url: "http://llm-a:11434" }
+      - { url: "http://llm-b:11434" }
+    routing:
+      model_key: "model"
+      by_model:
+        llama3: "http://llm-a:11434"
+        mistral: "http://llm-b:11434"
+```
+
+Test model routing:
+```bash
+# Routes to llm-a
+curl -X POST http://localhost:8080/services/my-llm/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model": "llama3", "prompt": "Hello"}'
+
+# Routes to llm-b  
+curl -X POST http://localhost:8080/services/my-llm/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mistral", "prompt": "Hello"}'
+```
+
+### Load Balancer Strategy
+Distribute requests across instances with health tracking:
+
+```yaml
+services:
+  my-service:
+    strategy: "load_balancer"
+    instances:
+      - { url: "http://service-a:8080", region: "us-east" }
+      - { url: "http://service-b:8080", region: "us-west" }
+```
+
+### Strategy Inspection
+View loaded strategies and configurations:
+```bash
+curl http://localhost:8080/v1/strategies | jq .
+```
+
+Returns:
+```json
+{
+  "loaded_strategies": {
+    "load_balancer": {
+      "name": "load_balancer",
+      "version": "1.0.0",
+      "features": ["round_robin_selection", "health_tracking"]
+    },
+    "model_router": {
+      "name": "model_router",
+      "version": "1.0.0"
+    }
+  },
+  "service_configurations": {
+    "my-llm": {
+      "strategy": "model_router",
+      "instances": [...],
+      "routing": {...}
+    }
+  }
+}
+```
 4. **Monitor metrics** for performance optimization
 5. **Customize strategies** for complex startup requirements
 

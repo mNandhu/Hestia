@@ -228,25 +228,25 @@ T037. [Tests] Health/fallback and LB integration [P]
 	- When chosen instance is down (respx 503/timeout), mark unhealthy and next request selects alternative.
 	- Ensure instance recovery toggles health back to healthy on 200.
 - Dependencies: T033, T034
- - Status: TODO
+ - Status: DONE (comprehensive health tracking integration tests passing; failover and recovery working correctly)
 
 T038. [Source] Observability for routing
 - Add structured logs and metrics for routing decisions:
 	- Which strategy selected, selected instance URL, reason (mapping hit / LB / fallback).
 	- Counters per strategy and per service.
 - Dependencies: T025, T034
- - Status: TODO
+ - Status: DONE (routing decision logs and metrics integrated; resolution_reason tracking added)
 
 T039. [Docs] Quickstart and spec updates
 - Update `specs/001-hestia-a-personal/quickstart.md` with routing examples.
 - Update `contracts` or notes if we expose any strategy inspection endpoints (optional).
 - Dependencies: T033, T034
- - Status: TODO
+ - Status: DONE (comprehensive strategy routing examples added to quickstart; strategy inspection endpoint documented)
 
 T040. [Optional] Strategy inspection endpoint [P]
 - Add `/v1/strategies` listing loaded strategies and per-service strategy configuration (read-only).
 - Dependencies: T017
- - Status: TODO
+ - Status: DONE (endpoint implemented; returns loaded strategies info and per-service configuration)
 
 ## Parallelization Guide
 - [P] T003, T004, T005, T006, T007, T008, T009, T010 can run in parallel after T002

@@ -44,9 +44,24 @@ class LoadBalancerStrategy:
             ]
         """
         self.service_instances[service_id] = instances
-        self.current_index[service_id] = 0
-        self.health_status[service_id] = {instance["url"]: True for instance in instances}
-        self.last_health_check[service_id] = {instance["url"]: 0 for instance in instances}
+
+        # Only initialize if not already present to preserve health status
+        if service_id not in self.current_index:
+            self.current_index[service_id] = 0
+
+        if service_id not in self.health_status:
+            self.health_status[service_id] = {}
+
+        if service_id not in self.last_health_check:
+            self.last_health_check[service_id] = {}
+
+        # Add health tracking for new instances, preserve existing status
+        for instance in instances:
+            url = instance["url"]
+            if url not in self.health_status[service_id]:
+                self.health_status[service_id][url] = True
+            if url not in self.last_health_check[service_id]:
+                self.last_health_check[service_id][url] = 0
 
     def get_next_instance(
         self, service_id: str, request_context: Optional[Dict] = None
@@ -95,15 +110,21 @@ class LoadBalancerStrategy:
 
     def mark_instance_unhealthy(self, service_id: str, instance_url: str, error: Exception):
         """Mark an instance as unhealthy after a failed request."""
-        if service_id in self.health_status and instance_url in self.health_status[service_id]:
-            self.health_status[service_id][instance_url] = False
-            print(f"Marked {instance_url} as unhealthy for {service_id}: {error}")
+        if service_id not in self.health_status:
+            return
+        if instance_url not in self.health_status[service_id]:
+            return
+        self.health_status[service_id][instance_url] = False
+        print(f"Marked {instance_url} as unhealthy for {service_id}: {error}")
 
     def mark_instance_healthy(self, service_id: str, instance_url: str):
         """Mark an instance as healthy after a successful request."""
-        if service_id in self.health_status and instance_url in self.health_status[service_id]:
-            self.health_status[service_id][instance_url] = True
-            print(f"Marked {instance_url} as healthy for {service_id}")
+        if service_id not in self.health_status:
+            return
+        if instance_url not in self.health_status[service_id]:
+            return
+        self.health_status[service_id][instance_url] = True
+        print(f"Marked {instance_url} as healthy for {service_id}")
 
     def should_check_health(
         self, service_id: str, instance_url: str, interval_seconds: int = 30
