@@ -1,6 +1,6 @@
 import pytest
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 
 from hestia.persistence import DatabaseManager, reset_database_for_testing, get_database_manager
 from hestia.models import Service, Machine, Activity
@@ -198,7 +198,7 @@ def test_persistence_with_models():
         activity = Activity(
             id="test-activity",
             service_id="persistence-test",
-            last_used_at=datetime.utcnow(),
+            last_used_at=datetime.now(UTC),
             state="hot",
             idle_timeout_seconds=300,
         )

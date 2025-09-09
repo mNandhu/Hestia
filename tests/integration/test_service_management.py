@@ -117,8 +117,7 @@ def test_service_status_shows_queue_pending(monkeypatch):
             client.post(
                 "/v1/requests",
                 json={"serviceId": "ollama", "method": "GET", "path": "/v1/models"},
-                timeout=1,
-            )  # Short timeout for test
+            )  # Remove timeout parameter to avoid deprecation warning
         except Exception:
             pass  # Expected to timeout/fail
 

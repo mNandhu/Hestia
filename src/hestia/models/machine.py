@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy import Column, String, Enum, DateTime, JSON
 from .base import Base
 
@@ -12,8 +12,8 @@ class Machine(Base):
     capabilities = Column(JSON, nullable=False, default=dict)
     address = Column(String, nullable=False)
     status = Column(Enum("available", "unavailable", name="machine_status"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False)
 
     def __repr__(self):
         return f"<Machine(id='{self.id}', name='{self.name}', role='{self.role}', status='{self.status}')>"

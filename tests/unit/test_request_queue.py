@@ -12,9 +12,10 @@ def test_request_queue_initialization():
     assert len(queue._service_queues) == 0
 
 
-def test_queued_request_creation():
+@pytest.mark.asyncio
+async def test_queued_request_creation():
     """Test QueuedRequest creation and properties."""
-    future = asyncio.Future()
+    future = asyncio.get_running_loop().create_future()
     request = QueuedRequest(
         service_id="test-service",
         request_data={"method": "GET", "path": "/test"},
