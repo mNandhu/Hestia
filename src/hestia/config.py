@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, Any, List
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -16,6 +16,18 @@ class ServiceConfig(BaseModel):
     # Request queue configuration
     queue_size: int = Field(default=100, ge=1)
     request_timeout_seconds: int = Field(default=60, ge=1)
+    # Strategy-based routing (optional)
+    instances: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of upstream instances for strategies like load_balancer/model_router",
+    )
+    strategy: Optional[str] = Field(
+        default=None, description="Optional strategy name to select upstream per-request"
+    )
+    routing: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Arbitrary strategy-specific routing configuration (e.g., by_model)",
+    )
 
     @field_validator("retry_count")
     @classmethod

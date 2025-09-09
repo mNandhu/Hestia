@@ -300,3 +300,27 @@ When contributing new strategies:
 - Monitor memory usage patterns
 
 For more information, see the [Hestia Documentation](https://github.com/mNandhu/Hestia-SSD).
+
+## Model-aware Router (`model_router.py`)
+
+Selects upstream instance based on a model name found in the request context. Configure per-service in `hestia_config.yml`:
+
+```yaml
+services:
+  my-llm:
+    base_url: "http://fallback-llm:11434"
+    strategy: "model_router"
+    instances:
+      - { url: "http://llm-a:11434" }
+      - { url: "http://llm-b:11434" }
+    routing:
+      model_key: "model"  # JSON key to inspect
+      by_model:
+        llama3: "http://llm-a:11434"
+        mistral: "http://llm-b:11434"
+```
+
+Behavior:
+- If request JSON includes `{model: <name>}` and `<name>` maps in `by_model`, that instance is used.
+- Otherwise, the router delegates to the `load_balancer` (if configured via `instances`).
+- If no instances or LB available, falls back to `base_url`.

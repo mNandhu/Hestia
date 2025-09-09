@@ -14,6 +14,16 @@ services:
   ollama:
     # Base URL where the service is running
     base_url: "http://localhost:11434"
+    # Optional: strategy-based routing
+    # strategy: "model_router"         # choose strategy (e.g., model_router, load_balancer)
+    # instances:
+    #   - { url: "http://ollama-a:11434", region: "us-east" }
+    #   - { url: "http://ollama-b:11434", region: "us-west" }
+    # routing:
+    #   model_key: "model"             # field to read from JSON body for model id
+    #   by_model:
+    #     llama3: "http://ollama-a:11434"
+    #     mistral: "http://ollama-b:11434"
     
     # Health check endpoint (optional)
     # If provided, Hestia will poll this URL to verify service readiness

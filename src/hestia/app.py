@@ -1,7 +1,7 @@
 import asyncio
 import json
 import time
-from typing import Optional
+from typing import Optional, Any
 from urllib.parse import urljoin
 
 import httpx
@@ -15,6 +15,7 @@ from hestia.middleware import add_logging_middleware
 from hestia.models.gateway import GatewayRequest, GatewayResponse, ServiceStatus
 from hestia.persistence import init_database
 from hestia.request_queue import RequestQueue
+from hestia.strategy_loader import StrategyRegistry, load_strategies
 
 app = FastAPI(title="Hestia API")
 
@@ -36,6 +37,11 @@ _request_queue = RequestQueue()
 _services: dict[str, dict] = {}
 _IDLE_THREAD_STARTED = False
 
+# Load strategies and keep instances cache
+_strategy_registry = StrategyRegistry()
+load_strategies("strategies")
+_strategy_instances: dict[str, Any] = {}
+
 # Log gateway startup
 logger.log_event(EventType.GATEWAY_START, "Hestia Gateway starting up")
 
@@ -43,6 +49,90 @@ logger.log_event(EventType.GATEWAY_START, "Hestia Gateway starting up")
 def _get_config():
     """Get current config (reloads to pick up env changes in tests)"""
     return load_config()
+
+
+def _get_strategy_instance(name: str):
+    """Get or create a strategy instance by name from registry."""
+    try:
+        if name not in _strategy_instances:
+            factory = _strategy_registry.get_strategy(name)
+            _strategy_instances[name] = factory()
+        return _strategy_instances[name]
+    except Exception:
+        return None
+
+
+def _build_request_context_from_gateway(gateway_request: GatewayRequest) -> dict:
+    ctx = {
+        "method": gateway_request.method,
+        "path": gateway_request.path,
+        "headers": gateway_request.headers or {},
+        "body": gateway_request.body,
+        "json": gateway_request.body if isinstance(gateway_request.body, (dict, list)) else None,
+    }
+    # Extract a convenient 'model' if present
+    if isinstance(gateway_request.body, dict) and "model" in gateway_request.body:
+        ctx["model"] = gateway_request.body.get("model")
+    return ctx
+
+
+async def _build_request_context_from_proxy(request: Request, proxyPath: str) -> dict:
+    headers = dict(request.headers)
+    body_bytes = None
+    json_obj = None
+    if request.method in ["POST", "PUT", "PATCH"]:
+        body_bytes = await request.body()
+        # Try parse json
+        try:
+            json_obj = json.loads(body_bytes.decode("utf-8")) if body_bytes else None
+        except Exception:
+            json_obj = None
+    ctx = {
+        "method": request.method,
+        "path": proxyPath,
+        "headers": headers,
+        "query": str(request.url.query) if request.url.query else None,
+        "body": body_bytes,
+        "json": json_obj,
+    }
+    if isinstance(json_obj, dict) and "model" in json_obj:
+        ctx["model"] = json_obj.get("model")
+    return ctx
+
+
+def _resolve_upstream_base(service_id: str, service_config, request_context: dict) -> str:
+    """Resolve upstream base URL using configured strategy or fallback to base_url.
+
+    Strategy contract: strategy.route_request(service_id, request_context, config) -> Optional[str]
+    """
+    # Strategy-based resolution
+    strategy_name = getattr(service_config, "strategy", None)
+    if strategy_name:
+        strategy = _get_strategy_instance(strategy_name)
+        if strategy and hasattr(strategy, "route_request"):
+            try:
+                url = strategy.route_request(service_id, request_context, service_config)
+                if isinstance(url, str) and url:
+                    return url
+            except Exception:
+                # Ignore strategy errors and fallback
+                pass
+
+    # Fallback: if instances configured and load_balancer available, select one
+    instances = getattr(service_config, "instances", []) or []
+    if instances:
+        lb = _get_strategy_instance("load_balancer")
+        if lb and hasattr(lb, "register_service_instances") and hasattr(lb, "get_next_instance"):
+            try:
+                # Register instances for this service (idempotent)
+                lb.register_service_instances(service_id, instances)
+                picked = lb.get_next_instance(service_id, request_context)
+                if isinstance(picked, str) and picked:
+                    return picked
+            except Exception:
+                pass
+
+    return service_config.base_url
 
 
 @app.post("/v1/requests")
@@ -114,7 +204,9 @@ async def _perform_gateway_request(
     gateway_request: GatewayRequest, service_config
 ) -> GatewayResponse:
     """Perform the actual HTTP request to the target service."""
-    base = service_config.base_url
+    # Resolve base via strategy
+    req_ctx = _build_request_context_from_gateway(gateway_request)
+    base = _resolve_upstream_base(gateway_request.service_id, service_config, req_ctx)
     target = urljoin(base.rstrip("/") + "/", gateway_request.path.lstrip("/"))
 
     # Prepare request parameters
@@ -458,7 +550,9 @@ async def _perform_proxy_request(
     request: Request, serviceId: str, proxyPath: str, service_config
 ) -> Response:
     """Perform the actual proxy request to the upstream service."""
-    base = service_config.base_url
+    # Resolve base via strategy
+    req_ctx = await _build_request_context_from_proxy(request, proxyPath)
+    base = _resolve_upstream_base(serviceId, service_config, req_ctx)
     target = urljoin(base.rstrip("/") + "/", proxyPath)
 
     # Start timing

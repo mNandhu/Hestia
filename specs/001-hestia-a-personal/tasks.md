@@ -188,7 +188,7 @@ T032. [Spec/Design] Strategy routing requirements and config schema
 	- `services.<id>.routing.by_model: { <key>: <instance_url> }` (example strategy-specific mapping)
 - Document how `request_context` is constructed (path, headers, body fields like `model`, query params).
 - Dependencies: T017, T014
- - Status: TODO
+ - Status: DONE (config schema added to ServiceConfig; request_context defined and used; examples documented)
 
 T033. [Tests] Integration tests for strategy-based routing [P]
 - Add `tests/integration/test_strategy_routing.py`:
@@ -196,7 +196,7 @@ T033. [Tests] Integration tests for strategy-based routing [P]
 	- When no mapping matches, fallback to load balancer selection.
 	- Use `respx` to assert correct upstream URLs are called (no hardcoded Ollama assumptions; use generic `serviceId`).
 - Dependencies: T032
- - Status: TODO
+ - Status: DONE (tests/integration/test_strategy_routing.py implemented and passing)
 
 T034. [Source] Load strategies on startup and wire into request path
 - In `src/hestia/app.py`, load strategies at startup (`load_strategies("strategies")`) and keep a registry reference.
@@ -207,7 +207,7 @@ T034. [Source] Load strategies on startup and wire into request path
 		- Else call `load_balancer.get_next_instance(service_id, request_context)`.
 		- Fallback to `service_config.base_url` if none.
 - Dependencies: T017, T032
- - Status: TODO
+ - Status: DONE (strategies loaded at startup; request_context built; resolution via strategy/LB/fallback wired)
 
 T035. [Source] Provide a minimal model-aware router strategy (example)
 - Add `strategies/model_router.py` with `register_strategy(registry)`:
@@ -215,13 +215,13 @@ T035. [Source] Provide a minimal model-aware router strategy (example)
 	- Delegates to load balancer when no direct hit.
 - Keep generic; do not assume Ollama-specific shapes beyond a configurable key name (default `model`).
 - Dependencies: T017, T032
- - Status: TODO
+ - Status: DONE (strategies/model_router.py implemented and registered)
 
 T036. [Config/Docs] Extend examples for strategies and routing
 - Update example `hestia_config.yml` to include `instances` and `routing` blocks.
 - Document service-agnostic patterns in `strategies/README.md` with a short example.
 - Dependencies: T032, T035
- - Status: TODO
+ - Status: DONE (hestia_config.yml example extended; strategies/README.md updated)
 
 T037. [Tests] Health/fallback and LB integration [P]
 - Integration tests:
