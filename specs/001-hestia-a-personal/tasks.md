@@ -162,6 +162,7 @@ T028. [CI/CD] GitHub Actions: tests
 T029. [Docs] Example `strategies/` and `hestia_config.yml`
 - Provide placeholders and comments for customization
 - Dependencies: T014, T017
+ - Status: DONE (comprehensive examples with 11 services, 4 strategies, detailed documentation)
 
 T030. [Docs] Update quickstart with curl examples and stable URL
 - Verify `/services/{serviceId}/...` usage and note `OLLAMA_BASE_URL=http://localhost:8080/services/ollama`

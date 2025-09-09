@@ -1,0 +1,176 @@
+# Hestia Gateway Configuration
+# 
+# This file configures services that Hestia will proxy to, including
+# startup policies, health checks, timeouts, and queue settings.
+#
+# Environment variables can override any setting for the 'ollama' service:
+# - OLLAMA_BASE_URL, OLLAMA_RETRY_COUNT, OLLAMA_RETRY_DELAY_MS, etc.
+#
+# For documentation see: https://github.com/mNandhu/Hestia-SSD
+
+services:
+  # Ollama - Large Language Model API Server
+  # This is the default service and is always available
+  ollama:
+    # Base URL where the service is running
+    base_url: "http://localhost:11434"
+    
+    # Health check endpoint (optional)
+    # If provided, Hestia will poll this URL to verify service readiness
+    # If not provided, will use warmup_ms delay instead
+    health_url: "http://localhost:11434/api/tags"
+    
+    # Retry configuration
+    retry_count: 3              # Number of retry attempts for failed requests
+    retry_delay_ms: 1000        # Delay between retries in milliseconds
+    
+    # Service startup configuration
+    warmup_ms: 5000            # Time to wait for service startup (if no health_url)
+    
+    # Idle timeout configuration
+    idle_timeout_ms: 300000    # Auto-shutdown after 5 minutes of inactivity (0 = disabled)
+    
+    # Fallback configuration (optional)
+    # If primary service fails, try this URL as backup
+    fallback_url: null         # Example: "http://backup-ollama:11434"
+    
+    # Request queue configuration
+    queue_size: 100            # Maximum number of queued requests per service
+    request_timeout_seconds: 60 # Maximum time to wait for cold service startup
+  
+  # Open WebUI - Web interface for Ollama
+  open-webui:
+    base_url: "http://localhost:3000"
+    health_url: "http://localhost:3000/health"
+    retry_count: 2
+    retry_delay_ms: 500
+    warmup_ms: 3000
+    idle_timeout_ms: 600000    # 10 minutes
+    queue_size: 50
+    request_timeout_seconds: 30
+  
+  # ComfyUI - AI Image Generation
+  comfyui:
+    base_url: "http://localhost:8188"
+    health_url: "http://localhost:8188/system_stats"
+    retry_count: 2
+    retry_delay_ms: 2000
+    warmup_ms: 10000           # Longer startup time for GPU services
+    idle_timeout_ms: 900000    # 15 minutes (GPU services are expensive to restart)
+    queue_size: 20             # Smaller queue for resource-intensive services
+    request_timeout_seconds: 120
+  
+  # Stable Diffusion WebUI
+  stable-diffusion:
+    base_url: "http://localhost:7860"
+    health_url: "http://localhost:7860/internal/ping"
+    retry_count: 1
+    retry_delay_ms: 3000
+    warmup_ms: 15000           # Very long startup for large models
+    idle_timeout_ms: 1800000   # 30 minutes
+    queue_size: 10
+    request_timeout_seconds: 180
+  
+  # Jupyter Lab - Data Science Environment
+  jupyter:
+    base_url: "http://localhost:8888"
+    health_url: "http://localhost:8888/api"
+    retry_count: 2
+    retry_delay_ms: 1000
+    warmup_ms: 5000
+    idle_timeout_ms: 1800000   # 30 minutes
+    queue_size: 25
+    request_timeout_seconds: 45
+  
+  # Code Server - VS Code in Browser
+  code-server:
+    base_url: "http://localhost:8443"
+    health_url: "http://localhost:8443/healthz"
+    retry_count: 1
+    retry_delay_ms: 1000
+    warmup_ms: 8000
+    idle_timeout_ms: 3600000   # 1 hour
+    queue_size: 15
+    request_timeout_seconds: 60
+  
+  # MinIO - Object Storage
+  minio:
+    base_url: "http://localhost:9000"
+    health_url: "http://localhost:9000/minio/health/live"
+    retry_count: 3
+    retry_delay_ms: 500
+    warmup_ms: 2000
+    idle_timeout_ms: 0         # Never auto-shutdown storage services
+    queue_size: 200            # High throughput for storage
+    request_timeout_seconds: 30
+  
+  # PostgreSQL - Database (via HTTP API like PostgREST)
+  postgres:
+    base_url: "http://localhost:3001"
+    health_url: "http://localhost:3001/"
+    retry_count: 5             # High reliability for database
+    retry_delay_ms: 200
+    warmup_ms: 3000
+    idle_timeout_ms: 0         # Never auto-shutdown database
+    fallback_url: "http://postgres-replica:3001"  # Database replica
+    queue_size: 500            # High queue for database requests
+    request_timeout_seconds: 15
+  
+  # Example: High-Availability Service with Fallback
+  critical-api:
+    base_url: "http://primary-api:8080"
+    health_url: "http://primary-api:8080/health"
+    retry_count: 2
+    retry_delay_ms: 1000
+    warmup_ms: 5000
+    idle_timeout_ms: 0
+    fallback_url: "http://secondary-api:8080"  # Automatic failover
+    queue_size: 100
+    request_timeout_seconds: 30
+  
+  # Example: Development Service (Fast startup, aggressive shutdown)
+  dev-service:
+    base_url: "http://localhost:8001"
+    retry_count: 1
+    retry_delay_ms: 500
+    warmup_ms: 1000            # Fast startup
+    idle_timeout_ms: 60000     # Shutdown after 1 minute (development)
+    queue_size: 10
+    request_timeout_seconds: 15
+  
+  # Example: Production Service (Robust configuration)
+  prod-service:
+    base_url: "http://prod-service:8080"
+    health_url: "http://prod-service:8080/actuator/health"
+    retry_count: 5             # High retry for production
+    retry_delay_ms: 2000
+    warmup_ms: 10000
+    idle_timeout_ms: 0         # Never auto-shutdown in production
+    fallback_url: "http://prod-service-backup:8080"
+    queue_size: 500
+    request_timeout_seconds: 60
+
+# Configuration Tips:
+#
+# 1. Service Types:
+#    - Web Apps: moderate timeouts, health checks, reasonable idle times
+#    - ML/AI Services: long startup, longer idle times (GPU resources)
+#    - Databases: high reliability, no auto-shutdown, fallbacks
+#    - Development: fast startup, aggressive shutdown
+#
+# 2. Timeout Guidelines:
+#    - warmup_ms: 1-2s (web), 5-15s (ML), 30s+ (large models)
+#    - idle_timeout_ms: 5-10min (web), 15-30min (ML), 0 (critical services)
+#    - request_timeout_seconds: 15-30s (web), 60-180s (ML)
+#
+# 3. Queue Configuration:
+#    - queue_size: 10-50 (resource-intensive), 100-500 (lightweight)
+#    - Higher queues for services with longer startup times
+#
+# 4. Health Checks:
+#    - Always use health_url when available for faster readiness detection
+#    - Fallback to warmup_ms for services without health endpoints
+#
+# 5. Environment Override (Ollama only):
+#    export OLLAMA_BASE_URL="http://remote-ollama:11434"
+#    export OLLAMA_IDLE_TIMEOUT_MS=600000
