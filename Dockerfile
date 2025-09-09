@@ -1,18 +1,23 @@
-# syntax=docker/dockerfile:1
+# Base image with uv pre-installed (Python 3.12 on Alpine)
+FROM ghcr.io/astral-sh/uv:python3.12-alpine
 
-# === Builder ===
-FROM python:3.12-slim AS builder
+# Set working directory
 WORKDIR /app
-COPY pyproject.toml .
-RUN pip install --upgrade pip && pip install uv
+
+# Copy project metadata and lockfile
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies (without project code)
+RUN uv sync --locked
+
+# Copy application source
 COPY . .
-RUN uv pip install . && uv pip install .[dev]
 
-# === Runtime ===
-FROM python:3.12-slim AS runtime
-ENV PYTHONUNBUFFERED=1
-WORKDIR /app
-COPY --from=builder /usr/local /usr/local
-COPY src ./src
+# Install the project as a package (no-deps to avoid reinstalling dependencies)
+RUN uv pip install --no-deps .
+
+# Expose port
 EXPOSE 8080
-CMD ["python", "-m", "uvicorn", "hestia.app:app", "--host", "0.0.0.0", "--port", "8080"]
+
+# Default command to run the FastAPI app using the installed package
+CMD ["uv", "run", "uvicorn", "hestia.app:app", "--host", "0.0.0.0", "--port", "8080"]
