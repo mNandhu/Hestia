@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -118,7 +118,7 @@ def test_activity_model_creation(db_session):
     activity = Activity(
         id="activity-1",
         service_id="test-service",
-        last_used_at=datetime.utcnow(),
+        last_used_at=datetime.now(UTC),
         state="hot",
         idle_timeout_seconds=300,
     )
@@ -139,7 +139,7 @@ def test_activity_idle_timeout_validation(db_session):
     activity_valid = Activity(
         id="activity-valid",
         service_id="test-service",
-        last_used_at=datetime.utcnow(),
+        last_used_at=datetime.now(UTC),
         state="hot",
         idle_timeout_seconds=300,
     )
@@ -150,7 +150,7 @@ def test_activity_idle_timeout_validation(db_session):
     activity_zero = Activity(
         id="activity-zero",
         service_id="test-service",
-        last_used_at=datetime.utcnow(),
+        last_used_at=datetime.now(UTC),
         state="hot",
         idle_timeout_seconds=0,
     )
@@ -196,7 +196,7 @@ def test_service_activity_relationship(db_session):
     activity1 = Activity(
         id="activity-1",
         service_id="test-service",
-        last_used_at=datetime.utcnow(),
+        last_used_at=datetime.now(UTC),
         state="hot",
         idle_timeout_seconds=300,
     )
@@ -204,7 +204,7 @@ def test_service_activity_relationship(db_session):
     activity2 = Activity(
         id="activity-2",
         service_id="test-service",
-        last_used_at=datetime.utcnow(),
+        last_used_at=datetime.now(UTC),
         state="cold",
         idle_timeout_seconds=300,
     )

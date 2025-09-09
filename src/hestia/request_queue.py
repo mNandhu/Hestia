@@ -6,7 +6,7 @@ Provides FIFO queuing with bounded size and per-service timeouts.
 import asyncio
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict, Any, Optional
 from collections import deque
 
@@ -29,7 +29,7 @@ class QueuedRequest:
 
     def __post_init__(self):
         if self.created_at is None:
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(UTC)
 
 
 class RequestQueue:
@@ -72,7 +72,7 @@ class RequestQueue:
                 request_data=request_data,
                 timeout_seconds=timeout_seconds,
                 future=future,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
             )
 
             # Add to queue
