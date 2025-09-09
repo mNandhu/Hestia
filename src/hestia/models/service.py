@@ -14,7 +14,12 @@ class Service(Base):
     warmup_seconds = Column(Integer, nullable=True)
     auth_required = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
 
     def __repr__(self):
         return f"<Service(id='{self.id}', name='{self.name}', strategy='{self.strategy}')>"

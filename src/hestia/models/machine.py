@@ -13,7 +13,12 @@ class Machine(Base):
     address = Column(String, nullable=False)
     status = Column(Enum("available", "unavailable", name="machine_status"), nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
 
     def __repr__(self):
         return f"<Machine(id='{self.id}', name='{self.name}', role='{self.role}', status='{self.status}')>"
