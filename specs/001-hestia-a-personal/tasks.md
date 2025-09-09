@@ -168,6 +168,12 @@ T029. [Docs] Example `strategies/` and `hestia_config.yml`
 T030. [Docs] Update quickstart with curl examples and stable URL
 - Verify `/services/{serviceId}/...` usage and note `OLLAMA_BASE_URL=http://localhost:8080/services/ollama`
 - Dependencies: T021
+ - Status: DONE (comprehensive quickstart guide with curl examples, response formats, troubleshooting, configuration examples, and verified test coverage)
+
+T031. [Docs] Authentication documentation
+- Document API key configuration, security best practices, and auth endpoints
+- Include examples for different auth methods and troubleshooting guide
+- Dependencies: T024
 
 ## Parallelization Guide
 - [P] T003, T004, T005, T006, T007, T008, T009, T010 can run in parallel after T002
