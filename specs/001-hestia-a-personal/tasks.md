@@ -115,7 +115,7 @@ T018. [Source] Readiness checker
 T019. [Source] Startup policy engine
 - Retry with limit/delay; fallback machine selection; terminal error and event log
 - Dependencies: T005, T016, T017, T018
- - Status: PARTIAL (GET proxy supports retry/delay and a single fallback attempt; no event log yet)
+ - Status: DONE (comprehensive startup policy with retry/delay, fallback selection, terminal error handling, and complete event logging for observability)
 
 T020. [Source] Request queue for cold services
 - FIFO, bounded size, per-service timeouts; prevent duplicate startups

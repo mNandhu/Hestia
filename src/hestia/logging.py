@@ -57,6 +57,9 @@ class EventType(Enum):
     PROXY_START = "proxy_start"
     PROXY_END = "proxy_end"
     PROXY_ERROR = "proxy_error"
+    PROXY_RETRY = "proxy_retry"
+    PROXY_FALLBACK = "proxy_fallback"
+    PROXY_TERMINAL_ERROR = "proxy_terminal_error"
 
     # Strategy events
     STRATEGY_LOADED = "strategy_loaded"
@@ -418,6 +421,61 @@ class HestiaLogger:
             status_code=status_code,
             duration_ms=duration_ms,
             metadata=base_meta,
+            **kwargs,
+        )
+
+    def log_proxy_retry(
+        self,
+        service_id: str,
+        target_url: str,
+        attempt: int,
+        max_attempts: int,
+        error: str,
+        **kwargs,
+    ):
+        """Log proxy retry attempt."""
+        self.log_event(
+            EventType.PROXY_RETRY,
+            f"Retrying request to {target_url} (attempt {attempt + 1}/{max_attempts}): {error}",
+            service_id=service_id,
+            attempt=attempt + 1,
+            max_attempts=max_attempts,
+            target_url=target_url,
+            error=error,
+            **kwargs,
+        )
+
+    def log_proxy_fallback(
+        self,
+        service_id: str,
+        primary_url: str,
+        fallback_url: str,
+        **kwargs,
+    ):
+        """Log fallback attempt after primary failed."""
+        self.log_event(
+            EventType.PROXY_FALLBACK,
+            f"Primary endpoint {primary_url} failed, trying fallback {fallback_url}",
+            service_id=service_id,
+            primary_url=primary_url,
+            fallback_url=fallback_url,
+            **kwargs,
+        )
+
+    def log_proxy_terminal_error(
+        self,
+        service_id: str,
+        attempted_urls: list[str],
+        final_error: str,
+        **kwargs,
+    ):
+        """Log terminal error when all endpoints failed."""
+        self.log_event(
+            EventType.PROXY_TERMINAL_ERROR,
+            f"All endpoints failed for {service_id}: {attempted_urls} - {final_error}",
+            service_id=service_id,
+            attempted_urls=attempted_urls,
+            final_error=final_error,
             **kwargs,
         )
 

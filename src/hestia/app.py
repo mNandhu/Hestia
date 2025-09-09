@@ -292,6 +292,11 @@ async def _perform_gateway_request(
     retry_delay_ms = service_config.retry_delay_ms
     fallback = service_config.fallback_url
 
+    # Track attempted URLs for terminal error logging
+    attempted_urls = [base]
+    if fallback:
+        attempted_urls.append(fallback)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         # Try primary endpoint with retries
         for attempt in range(total_attempts):
@@ -354,6 +359,14 @@ async def _perform_gateway_request(
 
                 # If not last attempt, honor delay and retry
                 if attempt < (total_attempts - 1):
+                    # Log retry attempt
+                    logger.log_proxy_retry(
+                        gateway_request.service_id,
+                        target,
+                        attempt,
+                        total_attempts,
+                        str(e),
+                    )
                     if retry_delay_ms > 0:
                         await asyncio.sleep(retry_delay_ms / 1000.0)
                     continue
@@ -362,6 +375,13 @@ async def _perform_gateway_request(
 
         # Try fallback once if available
         if fallback:
+            # Log fallback attempt
+            logger.log_proxy_fallback(
+                gateway_request.service_id,
+                base,
+                fallback,
+            )
+
             try:
                 fallback_target = urljoin(
                     fallback.rstrip("/") + "/", gateway_request.path.lstrip("/")
@@ -402,6 +422,17 @@ async def _perform_gateway_request(
 
             except Exception:
                 pass
+
+    # All attempts failed - log terminal error
+    attempted_urls = [base]
+    if fallback:
+        attempted_urls.append(fallback)
+
+    logger.log_proxy_terminal_error(
+        gateway_request.service_id,
+        attempted_urls,
+        "All request attempts failed",
+    )
 
     # All attempts failed
     raise Exception("All request attempts failed")
@@ -766,6 +797,14 @@ async def _perform_proxy_request(
                 # For 5xx errors, continue to retry/fallback instead of returning immediately
                 if upstream_response.status_code >= 500:
                     if attempt < (total_attempts - 1):
+                        # Log retry attempt for 5xx errors
+                        logger.log_proxy_retry(
+                            serviceId,
+                            target,
+                            attempt,
+                            total_attempts,
+                            f"HTTP {upstream_response.status_code}",
+                        )
                         if retry_delay_ms > 0:
                             await asyncio.sleep(retry_delay_ms / 1000.0)
                         continue
@@ -793,6 +832,14 @@ async def _perform_proxy_request(
 
                 # If not last attempt, honor delay and retry
                 if attempt < (total_attempts - 1):
+                    # Log retry attempt
+                    logger.log_proxy_retry(
+                        serviceId,
+                        target,
+                        attempt,
+                        total_attempts,
+                        str(e),
+                    )
                     if retry_delay_ms > 0:
                         await asyncio.sleep(retry_delay_ms / 1000.0)
                     continue
@@ -801,6 +848,13 @@ async def _perform_proxy_request(
 
         # Try fallback once if available
         if fallback:
+            # Log fallback attempt
+            logger.log_proxy_fallback(
+                serviceId,
+                base,
+                fallback,
+            )
+
             try:
                 fallback_target = urljoin(fallback.rstrip("/") + "/", proxyPath)
                 if query_params:
@@ -838,6 +892,17 @@ async def _perform_proxy_request(
 
             except Exception:
                 pass
+
+    # All attempts failed - log terminal error
+    attempted_urls = [base]
+    if fallback:
+        attempted_urls.append(fallback)
+
+    logger.log_proxy_terminal_error(
+        serviceId,
+        attempted_urls,
+        "All request attempts failed",
+    )
 
     # All attempts failed
     duration_ms = (time.time() - start_time) * 1000
