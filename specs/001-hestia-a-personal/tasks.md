@@ -144,6 +144,7 @@ T024. [Source] Optional auth middleware
 T025. [Source] Structured logging and basic metrics
 - Log events per FR-013; add request IDs; counters/timers skeleton
 - Dependencies: T004, T005
+ - Status: DONE (comprehensive structured logging system with request IDs, event tracking, metrics collection, middleware integration, service lifecycle logging, and 30 passing tests)
 
 T026. [Integration] Semaphore API client and mocks
 - httpx client; internal URL `http://semaphore:3000`; respx mocks in tests

@@ -1,18 +1,30 @@
 import asyncio
 import json
 import time
+from typing import Optional
 from urllib.parse import urljoin
 
 import httpx
-from fastapi import FastAPI, Response, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import StreamingResponse
 
 from hestia.config import load_config
+from hestia.logging import EventType, LogLevel, configure_logging, get_logger
+from hestia.metrics import get_metrics
+from hestia.middleware import add_logging_middleware
+from hestia.models.gateway import GatewayRequest, GatewayResponse, ServiceStatus
 from hestia.persistence import init_database
 from hestia.request_queue import RequestQueue
-from hestia.models.gateway import GatewayRequest, GatewayResponse, ServiceStatus
 
 app = FastAPI(title="Hestia API")
+
+# Configure structured logging
+configure_logging(LogLevel.INFO)
+logger = get_logger("hestia.app")
+metrics = get_metrics()
+
+# Add logging middleware
+add_logging_middleware(app, exclude_paths=["/health", "/metrics", "/favicon.ico"])
 
 # Initialize database on startup
 init_database()
@@ -23,6 +35,9 @@ _request_queue = RequestQueue()
 # In-memory minimal state for readiness/idle tracking (per-service)
 _services: dict[str, dict] = {}
 _IDLE_THREAD_STARTED = False
+
+# Log gateway startup
+logger.log_event(EventType.GATEWAY_START, "Hestia Gateway starting up")
 
 
 def _get_config():
@@ -264,6 +279,18 @@ def get_service_status(serviceId: str) -> ServiceStatus:
     )
 
 
+@app.get("/v1/metrics")
+def get_metrics_endpoint():
+    """Get all collected metrics."""
+    return metrics.get_all_metrics()
+
+
+@app.get("/v1/services/{serviceId}/metrics")
+def get_service_metrics_endpoint(serviceId: str):
+    """Get metrics for a specific service."""
+    return metrics.get_service_metrics(serviceId)
+
+
 @app.post("/v1/services/{serviceId}/start")
 async def start_service_proactively(serviceId: str) -> Response:
     """Proactively start a service if it's not already running."""
@@ -295,6 +322,11 @@ async def start_service_proactively(serviceId: str) -> Response:
 
     # Mark service as starting
     if _request_queue.mark_service_starting(serviceId):
+        # Log service start
+        start_time = time.time()
+        logger.log_service_start(serviceId, metadata={"config": service_config.__dict__})
+        metrics.increment_counter("service_starts_total", service_id=serviceId)
+
         # For very small warmup times (likely tests), start synchronously
         service_config = _get_config().services.get(serviceId, _get_config().services["ollama"])
         if service_config.warmup_ms <= 100 and not service_config.health_url:
@@ -310,12 +342,22 @@ async def start_service_proactively(serviceId: str) -> Response:
 
                 _request_queue.mark_service_ready(serviceId)
                 _request_queue.process_all_requests(serviceId, {"service_ready": True})
-            except Exception:
+
+                # Log service ready
+                startup_duration_ms = (time.time() - start_time) * 1000
+                logger.log_service_ready(serviceId, duration_ms=startup_duration_ms)
+                metrics.record_timer(
+                    "service_startup_duration_ms", startup_duration_ms, service_id=serviceId
+                )
+
+            except Exception as e:
+                logger.log_service_error(serviceId, f"Synchronous startup failed: {e}")
+                metrics.increment_counter("service_errors_total", service_id=serviceId)
                 _request_queue.clear_queue(serviceId)
                 _request_queue.mark_service_ready(serviceId)
         else:
             # Asynchronous startup for normal operation
-            asyncio.create_task(_start_service_async(serviceId, service_config))
+            asyncio.create_task(_start_service_async(serviceId, service_config, start_time))
 
         return Response(
             status_code=202,
@@ -391,6 +433,16 @@ async def _perform_proxy_request(
     base = service_config.base_url
     target = urljoin(base.rstrip("/") + "/", proxyPath)
 
+    # Start timing
+    start_time = time.time()
+    method = request.method
+
+    # Log proxy start
+    logger.log_proxy_start(serviceId, target, method, proxyPath)
+    metrics.increment_counter(
+        "proxy_requests_total", service_id=serviceId, labels={"method": method, "path": proxyPath}
+    )
+
     # Prepare request parameters
     method = request.method
     headers = dict(request.headers)
@@ -436,6 +488,16 @@ async def _perform_proxy_request(
 
                 # Mark activity for idle tracking
                 _touch(serviceId)
+
+                # Calculate proxy duration and log
+                duration_ms = (time.time() - start_time) * 1000
+                logger.log_proxy_end(serviceId, target, upstream_response.status_code, duration_ms)
+                metrics.record_timer(
+                    "proxy_duration_ms",
+                    duration_ms,
+                    service_id=serviceId,
+                    labels={"method": method, "status": str(upstream_response.status_code)},
+                )
 
                 # Prepare response headers
                 response_headers = dict(upstream_response.headers)
@@ -509,6 +571,23 @@ async def _perform_proxy_request(
             except Exception:
                 pass
 
+    # All attempts failed
+    duration_ms = (time.time() - start_time) * 1000
+    logger.error(
+        f"Proxy request failed: {method} {proxyPath}",
+        event_type=EventType.PROXY_ERROR,
+        service_id=serviceId,
+        method=method,
+        path=proxyPath,
+        duration_ms=duration_ms,
+        metadata={"target": target, "attempts": total_attempts},
+    )
+    metrics.increment_counter(
+        "proxy_errors_total",
+        service_id=serviceId,
+        labels={"method": method, "error": "service_unavailable"},
+    )
+
     return Response(status_code=503, content="Service unavailable")
 
 
@@ -535,7 +614,9 @@ def _should_stream_response(response: httpx.Response) -> bool:
     return False
 
 
-async def _start_service_async(service_id: str, service_config) -> None:
+async def _start_service_async(
+    service_id: str, service_config, start_time: Optional[float] = None
+) -> None:
     """Start a cold service asynchronously and notify queued requests when ready."""
     try:
         # Simulate service startup process
@@ -585,8 +666,20 @@ async def _start_service_async(service_id: str, service_config) -> None:
         _request_queue.mark_service_ready(service_id)
         _request_queue.process_all_requests(service_id, {"service_ready": True})
 
-    except Exception:
+        # Log service ready with timing
+        if start_time:
+            startup_duration_ms = (time.time() - start_time) * 1000
+            logger.log_service_ready(service_id, duration_ms=startup_duration_ms)
+            metrics.record_timer(
+                "service_startup_duration_ms", startup_duration_ms, service_id=service_id
+            )
+        else:
+            logger.log_service_ready(service_id)
+
+    except Exception as e:
         # Service startup failed, clear the queue and mark as not starting
+        logger.log_service_error(service_id, f"Async startup failed: {e}")
+        metrics.increment_counter("service_errors_total", service_id=service_id)
         _request_queue.clear_queue(service_id)
         _request_queue.mark_service_ready(service_id)  # Reset starting flag
 
@@ -625,8 +718,19 @@ def _idle_monitor_loop():
             last = svc.get("last_used_ms", now_ms)
             # Only flip hot services that have exceeded idle timeout
             if svc.get("state") == "hot" and (now_ms - last) >= idle_ms:
+                old_state = svc.get("state", "unknown")
                 svc["state"] = "cold"
                 svc["readiness"] = "not_ready"
+
+                # Log state change
+                logger.log_service_state_change(
+                    sid, old_state, "cold", metadata={"reason": "idle_timeout", "idle_ms": idle_ms}
+                )
+                metrics.increment_counter(
+                    "service_state_changes_total",
+                    service_id=sid,
+                    labels={"from": old_state, "to": "cold", "reason": "idle_timeout"},
+                )
         time.sleep(check_interval_ms / 1000.0)
 
 
