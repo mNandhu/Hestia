@@ -260,7 +260,7 @@ T042. [Integration Tests] Remote service startup/shutdown [P]
 - `tests/integration/test_semaphore_startup.py`: When a service is cold, Hestia requests Semaphore to start it, queues requests, and forwards when ready
 - `tests/integration/test_semaphore_shutdown.py`: After idle timeout, Hestia requests Semaphore to stop the service
 - Dependencies: T041
- - Status: TODO
+ - Status: DONE (comprehensive integration tests created for startup and shutdown scenarios with proper mocking and failure cases)
 
 T043. [Source] Semaphore API client and orchestration logic
 - Implement Semaphore client in Hestia; wire into cold start and idle shutdown flows
