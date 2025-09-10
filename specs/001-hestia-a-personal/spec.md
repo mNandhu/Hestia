@@ -1,4 +1,3 @@
-````markdown
 # Feature Specification: Hestia - Personal On-Demand Service Gateway
 
 **Feature Branch**: `001-hestia-a-personal`  
@@ -66,6 +65,8 @@ A developer working on personal projects across multiple machines wants to acces
 4. **Given** multiple machines are available for a service type, **When** a request comes in, **Then** Hestia selects the appropriate machine based on pre-configured rules
 5. **Given** a client application needs to access services, **When** making requests, **Then** the client only needs to know Hestia's address and the process is transparent
 6. **Given** an unmodified client configured with a service-prefixed base URL, **When** it calls `http://localhost:8080/services/{serviceId}/...`, **Then** Hestia transparently proxies the request to the appropriate service and returns the response
+7. **Given** a service is not running, **When** a client sends a request, **Then** Hestia will ask Semaphore to start the service remotely, queue the request, and forward it once ready
+8. **Given** a service is idle, **When** the timeout expires, **Then** Hestia will ask Semaphore to shut down the service remotely
 
 ### Edge Cases
 - What happens when a machine designated for a service is unavailable or unreachable?
@@ -73,6 +74,7 @@ A developer working on personal projects across multiple machines wants to acces
 - What occurs if multiple requests come in simultaneously for the same inactive service?
 - How does the system behave when a service crashes during operation?
 - What happens if Hestia itself needs to restart - how are running services tracked?
+- What if Semaphore is down or unreachable when Hestia tries to communicate with it?
 
 ## Requirements *(mandatory)*
 
@@ -95,6 +97,10 @@ A developer working on personal projects across multiple machines wants to acces
  - **FR-015**: System MUST determine service readiness via a configurable readiness check. Preferred: an HTTP health endpoint indicating success. If no health endpoint is provided, allow a fallback such as a fixed warm-up period before accepting requests. The readiness condition MUST be definable per service.
     - Recommendation: Where appropriate, allow additional readiness options such as a simple probe request or detecting a service-ready signal.
 - **FR-016**: System MUST expose a stable gateway on a single port (8080) and provide transparent, service-prefixed proxy paths at `/services/{serviceId}/...` to enable unmodified clients to integrate by changing only their base URL.
+- **FR-017**: System MUST integrate with Semaphore (or similar) to start/stop services on remote machines via API calls
+- **FR-018**: System MUST queue requests and only forward them once Semaphore confirms the service is running and healthy
+- **FR-019**: System MUST support config-driven orchestration, allowing per-service and per-host startup/shutdown policies
+- **FR-020**: System MUST support optional automatic shutdown of services via Semaphore after idle timeout
 
 ### Key Entities *(include if feature involves data)*
 - **Service**: Represents a backend service (LLM, database, API) with its configuration, resource requirements, and current state
@@ -102,6 +108,8 @@ A developer working on personal projects across multiple machines wants to acces
 - **Routing Rule**: Defines which types of services should run on which machines based on criteria like resource requirements
 - **Activity Monitor**: Tracks usage patterns and idle times for running services to enable automatic shutdown
 - **Request Route**: Maps incoming client requests to specific backend services and their locations
+- **Semaphore API Client**: Component responsible for communicating with Semaphore to start/stop services
+- **Service Orchestration Policy**: Defines startup/shutdown rules, target hosts, and timeouts for each service
 
 ---
 
@@ -135,5 +143,4 @@ A developer working on personal projects across multiple machines wants to acces
 - [x] Review checklist passed
 
 ---
-
 ````

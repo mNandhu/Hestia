@@ -248,10 +248,37 @@ T040. [Optional] Strategy inspection endpoint [P]
 - Dependencies: T017
  - Status: DONE (endpoint implemented; returns loaded strategies info and per-service configuration)
 
+# Semaphore Integration: Remote Service Management
+
+T041. [Contract Tests] Semaphore API contract [P]
+- Create contract tests for Hestia <-> Semaphore API: service start/stop requests, error handling, status polling
+- Endpoints: `/v1/semaphore/start`, `/v1/semaphore/stop`, `/v1/semaphore/status`
+- Dependencies: T003
+ - Status: TODO
+
+T042. [Integration Tests] Remote service startup/shutdown [P]
+- `tests/integration/test_semaphore_startup.py`: When a service is cold, Hestia requests Semaphore to start it, queues requests, and forwards when ready
+- `tests/integration/test_semaphore_shutdown.py`: After idle timeout, Hestia requests Semaphore to stop the service
+- Dependencies: T041
+ - Status: TODO
+
+T043. [Source] Semaphore API client and orchestration logic
+- Implement Semaphore client in Hestia; wire into cold start and idle shutdown flows
+- Support config-driven orchestration: per-service/host startup/shutdown policies
+- Dependencies: T042
+ - Status: TODO
+
+T044. [Config/Docs] Extend config and docs for Semaphore
+- Update `hestia_config.yml` to support remote orchestration policies
+- Document Semaphore integration, config options, and example flows
+- Dependencies: T043
+ - Status: TODO
+
 ## Parallelization Guide
 - [P] T003, T004, T005, T006, T007, T008, T009, T010 can run in parallel after T002
 - [P] T027 and T028 can run in parallel after T002
 - [P] T033, T037, T040 can run in parallel with source work after T032
+- [P] T041, T042, T043, T044 can run in parallel with other TODO tasks
 
 ## Suggested Task Agent Commands
 - tasks run T003
