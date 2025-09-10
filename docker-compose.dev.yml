@@ -1,0 +1,23 @@
+services:
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - SEMAPHORE_ADMIN=admin
+      - SEMAPHORE_ADMIN_PASSWORD=admin
+      - SEMAPHORE_ADMIN_NAME=Administrator
+      - SEMAPHORE_ADMIN_EMAIL=admin@example.com
+      - SEMAPHORE_DB_DIALECT=bolt
+      - SEMAPHORE_ACCESS_KEY_ENCRYPTION=gs72mPntFATGJs9qK1pQ0pQcHcCfvZHgv3EIbJqjNBI=
+    volumes:
+      - semaphore_data:/var/lib/semaphore
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  semaphore_data: {}
