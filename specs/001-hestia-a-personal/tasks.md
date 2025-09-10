@@ -254,7 +254,7 @@ T041. [Contract Tests] Semaphore API contract [P]
 - Create contract tests for Hestia <-> Semaphore API: service start/stop requests, error handling, status polling
 - Endpoints: `/v1/semaphore/start`, `/v1/semaphore/stop`, `/v1/semaphore/status`
 - Dependencies: T003
- - Status: TODO
+ - Status: DONE (comprehensive contract tests created with 12 test cases covering all endpoints, validation, and error handling)
 
 T042. [Integration Tests] Remote service startup/shutdown [P]
 - `tests/integration/test_semaphore_startup.py`: When a service is cold, Hestia requests Semaphore to start it, queues requests, and forwards when ready
