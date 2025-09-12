@@ -22,6 +22,62 @@ This starts:
 - Semaphore config persisted to named volume `semaphore_data`
 - Structured logging with request IDs enabled by default
 
+## Semaphore Automation (Optional)
+
+Hestia includes **Semaphore automation** for remote service orchestration. This allows you to automatically start/stop services on remote machines, provision cloud VMs, or manage GPU resources.
+
+### Quick Semaphore Setup
+
+```bash
+# Access Semaphore UI
+open http://localhost:3000
+# Default credentials: admin/admin
+
+# Enable Semaphore for any service
+export MYSERVICE_BASE_URL="http://target.local:8080"
+export MYSERVICE_SEMAPHORE_ENABLED=true
+export MYSERVICE_SEMAPHORE_MACHINE_ID="my-server"
+export SEMAPHORE_BASE_URL="http://localhost:3000"
+
+# Restart Hestia to pick up new config
+docker compose restart hestia
+```
+
+### Semaphore Automation Examples
+
+```bash
+# This will trigger remote automation
+curl http://localhost:8080/services/myservice/api/status
+```
+
+When you access a Semaphore-enabled service:
+1. **Hestia detects** the service is cold
+2. **Calls Semaphore API** to run automation (Ansible playbooks)
+3. **Waits for completion** (VM provision, service start, etc.)
+4. **Forwards your request** to the now-running service
+5. **Auto-shutdown** after idle timeout (cost optimization)
+
+### Common Patterns
+
+```bash
+# Cloud cost optimization
+export CLOUD_SERVICE_SEMAPHORE_ENABLED=true
+export CLOUD_SERVICE_SEMAPHORE_MACHINE_ID="aws-instance"
+export CLOUD_SERVICE_IDLE_TIMEOUT_MS=600000  # 10 min shutdown
+
+# GPU resource management  
+export GPU_SERVICE_SEMAPHORE_ENABLED=true
+export GPU_SERVICE_SEMAPHORE_MACHINE_ID="gpu-server"
+export GPU_SERVICE_IDLE_TIMEOUT_MS=1800000   # 30 min shutdown
+
+# Development environments
+export DEV_SERVICE_SEMAPHORE_ENABLED=true
+export DEV_SERVICE_SEMAPHORE_MACHINE_ID="dev-vm-pool"
+export DEV_SERVICE_IDLE_TIMEOUT_MS=300000    # 5 min shutdown
+```
+
+For detailed setup, see [Semaphore Integration Guide](../docs/semaphore-integration.md).
+
 ## Core API Endpoints
 
 ### Service Management
@@ -99,6 +155,111 @@ http://localhost:8080/services/{serviceId}/
 curl http://localhost:8080/services/myapi/health
 curl http://localhost:8080/services/myapi/data
 ```
+
+## Service Configuration Patterns
+
+Hestia supports multiple ways to configure services, from simple local services to complex remote orchestration.
+
+### 1. Local Services (Default)
+
+```yaml
+# hestia_config.yml
+services:
+  ollama:
+    base_url: "http://localhost:11434"
+    health_url: "http://localhost:11434/api/tags"
+    idle_timeout_ms: 300000  # 5 minutes
+```
+
+```bash
+# Test local service
+curl http://localhost:8080/services/ollama/api/tags
+```
+
+### 2. Remote Services (Simple)
+
+```bash
+# Configure via environment variables
+export REMOTE_API_BASE_URL="http://api.remote.com:8080"
+export REMOTE_API_RETRY_COUNT=3
+export REMOTE_API_IDLE_TIMEOUT_MS=600000  # 10 minutes
+
+# Access remote service through Hestia
+curl http://localhost:8080/services/remote-api/health
+```
+
+### 3. Cloud Services (Semaphore Automation)
+
+```bash
+# Enable cloud automation
+export CLOUD_ML_BASE_URL="http://gpu-vm.aws.com:8080"
+export CLOUD_ML_SEMAPHORE_ENABLED=true
+export CLOUD_ML_SEMAPHORE_MACHINE_ID="aws-gpu-instance"
+export CLOUD_ML_IDLE_TIMEOUT_MS=900000       # 15 min (cost optimization)
+export CLOUD_ML_SEMAPHORE_TASK_TIMEOUT=600   # 10 min VM startup
+
+# This will automatically provision AWS VM and start service
+curl http://localhost:8080/services/cloud-ml/api/generate \
+  -X POST -H "Content-Type: application/json" \
+  -d '{"model": "llama2", "prompt": "Hello from the cloud!"}'
+```
+
+### 4. Development Environments
+
+```bash
+# Quick dev environment provisioning
+export DEV_WORKSPACE_BASE_URL="http://dev.local:8080"
+export DEV_WORKSPACE_SEMAPHORE_ENABLED=true
+export DEV_WORKSPACE_SEMAPHORE_MACHINE_ID="dev-vm-pool"
+export DEV_WORKSPACE_IDLE_TIMEOUT_MS=300000    # 5 min (aggressive cleanup)
+export DEV_WORKSPACE_SEMAPHORE_TASK_TIMEOUT=120  # 2 min fast provision
+
+# Accessing this spins up a dev environment on demand
+curl http://localhost:8080/services/dev-workspace/api/status
+```
+
+### 5. GPU Resource Sharing
+
+```bash
+# Configure multiple services on same GPU server
+export STABLE_DIFFUSION_SEMAPHORE_ENABLED=true
+export STABLE_DIFFUSION_SEMAPHORE_MACHINE_ID="gpu-server-01"
+export STABLE_DIFFUSION_IDLE_TIMEOUT_MS=900000  # 15 minutes
+
+export COMFYUI_SEMAPHORE_ENABLED=true  
+export COMFYUI_SEMAPHORE_MACHINE_ID="gpu-server-01"  # Same server!
+export COMFYUI_IDLE_TIMEOUT_MS=900000
+
+# Hestia coordinates GPU usage automatically
+curl http://localhost:8080/services/stable-diffusion/api/txt2img
+curl http://localhost:8080/services/comfyui/api/prompt
+```
+
+### 6. High Availability Setup
+
+```yaml
+# hestia_config.yml
+services:
+  critical-api:
+    base_url: "http://primary.local:8080"
+    health_url: "http://primary.local:8080/health"
+    retry_count: 3
+    fallback_url: "http://backup.local:8080"  # Automatic failover
+    idle_timeout_ms: 0  # Never shutdown critical services
+```
+
+```bash
+# Test HA behavior (primary will be tried first, then fallback)
+curl http://localhost:8080/services/critical-api/data
+```
+
+### Configuration Tips
+
+- **Local Development**: Short idle timeouts (1-5 min), fast startup
+- **Cloud Services**: Moderate idle timeouts (10-30 min), Semaphore automation
+- **GPU Services**: Longer idle timeouts (15-60 min), resource coordination
+- **Production**: No idle timeout (always on) or very long timeouts (2+ hours)
+- **Cost Optimization**: Aggressive idle timeouts + Semaphore automation
 
 ## API Authentication (Optional)
 When authentication is enabled:

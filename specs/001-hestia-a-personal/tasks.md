@@ -266,13 +266,13 @@ T043. [Source] Semaphore API client and orchestration logic
 - Implement Semaphore client in Hestia; wire into cold start and idle shutdown flows
 - Support config-driven orchestration: per-service/host startup/shutdown policies
 - Dependencies: T042
- - Status: TODO
+ - Status: DONE
 
 T044. [Config/Docs] Extend config and docs for Semaphore
 - Update `hestia_config.yml` to support remote orchestration policies
 - Document Semaphore integration, config options, and example flows
 - Dependencies: T043
- - Status: TODO
+ - Status: DONE
 
 ## Parallelization Guide
 - [P] T003, T004, T005, T006, T007, T008, T009, T010 can run in parallel after T002

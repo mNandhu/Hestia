@@ -42,16 +42,14 @@ def test_cold_service_triggers_semaphore_start_request(monkeypatch):
         # Act: Request to cold service via transparent proxy
         resp = client.get(f"/services/{service_id}/v1/models")
 
-    # For now, this will fail because Semaphore integration isn't implemented yet
-    # The test expects that:
+    # T043 implementation complete! The test verifies that:
     # 1. Hestia detects the service is cold
     # 2. Hestia calls Semaphore API to start the service
-    # 3. Hestia queues the request until service is ready
-    # 4. Once ready, the request is forwarded and response returned
+    # 3. Hestia waits for Semaphore task completion
+    # 4. Request is forwarded to target service and response returned
 
-    # Until implementation is done, we expect this to fail with appropriate error
-    # This is a failing test that will be fixed by T043 implementation
-    assert resp.status_code in {500, 503, 404}  # Various failure modes expected
+    # The implementation is working correctly
+    assert resp.status_code == 200
 
 
 def test_requests_queued_during_semaphore_startup(monkeypatch):
@@ -99,16 +97,15 @@ def test_requests_queued_during_semaphore_startup(monkeypatch):
             f"/services/{service_id}/api/generate", json={"model": "test", "prompt": "hello"}
         )
 
-    # For now, these will fail because Semaphore integration isn't implemented
     # The test expects that:
     # 1. First request triggers Semaphore start and gets queued
     # 2. Second request also gets queued (doesn't trigger duplicate start)
     # 3. Both requests are forwarded once service is ready
     # 4. Both responses are returned in order
 
-    # Until implementation is done, we expect these to fail
-    assert resp1.status_code in {500, 503, 404}
-    assert resp2.status_code in {500, 503, 404}
+    # T043 implementation working correctly
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
 
 
 def test_semaphore_start_failure_returns_error(monkeypatch):
@@ -217,7 +214,9 @@ def test_semaphore_status_polling_until_ready(monkeypatch):
     )
     monkeypatch.setenv(f"{service_id.upper().replace('-', '_')}_SEMAPHORE_ENABLED", "true")
     monkeypatch.setenv(f"{service_id.upper().replace('-', '_')}_SEMAPHORE_MACHINE_ID", "server-05")
-    monkeypatch.setenv(f"{service_id.upper().replace('-', '_')}_SEMAPHORE_POLL_INTERVAL_MS", "100")
+    monkeypatch.setenv(
+        f"{service_id.upper().replace('-', '_')}_SEMAPHORE_POLL_INTERVAL", "0.1"
+    )  # 0.1 seconds
     monkeypatch.setenv("SEMAPHORE_BASE_URL", "http://semaphore:3000")
 
     with respx.mock(assert_all_called=False) as mock:
@@ -249,5 +248,5 @@ def test_semaphore_status_polling_until_ready(monkeypatch):
     # 3. Once ready, request is forwarded to target service
     # 4. Response is returned to client
 
-    # Until implementation is done, we expect this to fail
-    assert resp.status_code in {500, 503, 404}
+    # T043 implementation working correctly
+    assert resp.status_code == 200

@@ -15,6 +15,7 @@ from hestia.middleware import add_logging_middleware
 from hestia.models.gateway import GatewayRequest, GatewayResponse, ServiceStatus
 from hestia.persistence import init_database
 from hestia.request_queue import RequestQueue
+from hestia.semaphore_client import get_semaphore_client
 from hestia.strategy_loader import StrategyRegistry, load_strategies
 
 app = FastAPI(title="Hestia API")
@@ -952,62 +953,11 @@ async def _start_service_async(
 ) -> None:
     """Start a cold service asynchronously and notify queued requests when ready."""
     try:
-        # Simulate service startup process
-        # In a real implementation, this might call the existing start endpoint logic
-        # or use a strategy pattern to start different types of services
-
-        # For now, use the existing readiness logic
-        health_url = service_config.health_url
-        warmup_ms = service_config.warmup_ms
-
-        if health_url:
-            # Try health check approach
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.get(health_url)
-                    if resp.status_code == 200:
-                        now_ms = int(time.time() * 1000)
-                        _services.setdefault(service_id, {})["readiness"] = "ready"
-                        _services[service_id]["state"] = "hot"
-                        _services[service_id]["last_used_ms"] = now_ms
-                    else:
-                        # Fallback to warmup delay
-                        if warmup_ms > 0:
-                            await asyncio.sleep(warmup_ms / 1000.0)
-                        now_ms = int(time.time() * 1000)
-                        _services.setdefault(service_id, {})["readiness"] = "ready"
-                        _services[service_id]["state"] = "hot"
-                        _services[service_id]["last_used_ms"] = now_ms
-            except Exception:
-                # Fallback to warmup delay
-                if warmup_ms > 0:
-                    await asyncio.sleep(warmup_ms / 1000.0)
-                now_ms = int(time.time() * 1000)
-                _services.setdefault(service_id, {})["readiness"] = "ready"
-                _services[service_id]["state"] = "hot"
-                _services[service_id]["last_used_ms"] = now_ms
+        # Check if Semaphore automation is enabled for this service
+        if getattr(service_config, "semaphore_enabled", False):
+            await _start_service_with_semaphore(service_id, service_config, start_time)
         else:
-            # Use warmup delay
-            if warmup_ms > 0:
-                await asyncio.sleep(warmup_ms / 1000.0)
-            now_ms = int(time.time() * 1000)
-            _services.setdefault(service_id, {})["readiness"] = "ready"
-            _services[service_id]["state"] = "hot"
-            _services[service_id]["last_used_ms"] = now_ms
-
-        # Mark service as ready and process all queued requests
-        _request_queue.mark_service_ready(service_id)
-        _request_queue.process_all_requests(service_id, {"service_ready": True})
-
-        # Log service ready with timing
-        if start_time:
-            startup_duration_ms = (time.time() - start_time) * 1000
-            logger.log_service_ready(service_id, duration_ms=startup_duration_ms)
-            metrics.record_timer(
-                "service_startup_duration_ms", startup_duration_ms, service_id=service_id
-            )
-        else:
-            logger.log_service_ready(service_id)
+            await _start_service_traditional(service_id, service_config, start_time)
 
     except Exception as e:
         # Service startup failed, clear the queue and mark as not starting
@@ -1015,6 +965,184 @@ async def _start_service_async(
         metrics.increment_counter("service_errors_total", service_id=service_id)
         _request_queue.clear_queue(service_id)
         _request_queue.mark_service_ready(service_id)  # Reset starting flag
+
+
+async def _start_service_with_semaphore(
+    service_id: str, service_config, start_time: Optional[float] = None
+) -> None:
+    """Start a service using Semaphore automation."""
+    # Get Semaphore client
+    config = _get_config()
+    semaphore_client = get_semaphore_client(config.semaphore_base_url)
+
+    if not semaphore_client:
+        logger.log_service_error(
+            service_id, "Semaphore client not available - falling back to traditional startup"
+        )
+        await _start_service_traditional(service_id, service_config, start_time)
+        return
+
+    machine_id = getattr(service_config, "semaphore_machine_id", None)
+    if not machine_id:
+        logger.log_service_error(
+            service_id, "No Semaphore machine ID configured - falling back to traditional startup"
+        )
+        await _start_service_traditional(service_id, service_config, start_time)
+        return
+
+    logger.log_service_start(service_id, metadata={"method": "semaphore", "machine_id": machine_id})
+
+    # Start the service via Semaphore
+    start_template_id = getattr(service_config, "semaphore_start_template_id", 1)
+    task_response = await semaphore_client.start_service(
+        service_id=service_id, machine_id=machine_id, template_id=start_template_id
+    )
+
+    if not task_response:
+        logger.log_service_error(
+            service_id, "Failed to start Semaphore task - falling back to traditional startup"
+        )
+        await _start_service_traditional(service_id, service_config, start_time)
+        return
+
+    # Wait for Semaphore task to complete
+    task_timeout = getattr(service_config, "semaphore_task_timeout", 300)
+    poll_interval = getattr(service_config, "semaphore_poll_interval", 2.0)
+
+    final_response = await semaphore_client.wait_for_task_completion(
+        task_id=task_response.task_id, timeout_seconds=task_timeout, poll_interval=poll_interval
+    )
+
+    if not final_response or final_response.status != "success":
+        error_msg = (
+            f"Semaphore task failed: {final_response.status if final_response else 'timeout'}"
+        )
+        logger.log_service_error(service_id, error_msg)
+        return
+
+    # Mark service as ready
+    now_ms = int(time.time() * 1000)
+    _services.setdefault(service_id, {})["readiness"] = "ready"
+    _services[service_id]["state"] = "hot"
+    _services[service_id]["last_used_ms"] = now_ms
+
+    # Mark service as ready and process all queued requests
+    _request_queue.mark_service_ready(service_id)
+    _request_queue.process_all_requests(service_id, {"service_ready": True})
+
+    # Log service ready with timing
+    if start_time:
+        startup_duration_ms = (time.time() - start_time) * 1000
+        logger.log_service_ready(service_id, duration_ms=startup_duration_ms)
+        metrics.record_timer(
+            "service_startup_duration_ms", startup_duration_ms, service_id=service_id
+        )
+    else:
+        logger.log_service_ready(service_id)
+
+
+async def _start_service_traditional(
+    service_id: str, service_config, start_time: Optional[float] = None
+) -> None:
+    """Start a service using traditional health check or warmup delay."""
+    # Simulate service startup process
+    # In a real implementation, this might call the existing start endpoint logic
+    # or use a strategy pattern to start different types of services
+
+    # For now, use the existing readiness logic
+    health_url = service_config.health_url
+    warmup_ms = service_config.warmup_ms
+
+    if health_url:
+        # Try health check approach
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(health_url)
+                if resp.status_code == 200:
+                    now_ms = int(time.time() * 1000)
+                    _services.setdefault(service_id, {})["readiness"] = "ready"
+                    _services[service_id]["state"] = "hot"
+                    _services[service_id]["last_used_ms"] = now_ms
+                else:
+                    # Fallback to warmup delay
+                    if warmup_ms > 0:
+                        await asyncio.sleep(warmup_ms / 1000.0)
+                    now_ms = int(time.time() * 1000)
+                    _services.setdefault(service_id, {})["readiness"] = "ready"
+                    _services[service_id]["state"] = "hot"
+                    _services[service_id]["last_used_ms"] = now_ms
+        except Exception:
+            # Fallback to warmup delay
+            if warmup_ms > 0:
+                await asyncio.sleep(warmup_ms / 1000.0)
+            now_ms = int(time.time() * 1000)
+            _services.setdefault(service_id, {})["readiness"] = "ready"
+            _services[service_id]["state"] = "hot"
+            _services[service_id]["last_used_ms"] = now_ms
+    else:
+        # Use warmup delay
+        if warmup_ms > 0:
+            await asyncio.sleep(warmup_ms / 1000.0)
+        now_ms = int(time.time() * 1000)
+        _services.setdefault(service_id, {})["readiness"] = "ready"
+        _services[service_id]["state"] = "hot"
+        _services[service_id]["last_used_ms"] = now_ms
+
+    # Mark service as ready and process all queued requests
+    _request_queue.mark_service_ready(service_id)
+    _request_queue.process_all_requests(service_id, {"service_ready": True})
+
+    # Log service ready with timing
+    if start_time:
+        startup_duration_ms = (time.time() - start_time) * 1000
+        logger.log_service_ready(service_id, duration_ms=startup_duration_ms)
+        metrics.record_timer(
+            "service_startup_duration_ms", startup_duration_ms, service_id=service_id
+        )
+    else:
+        logger.log_service_ready(service_id)
+
+
+async def _shutdown_service_with_semaphore(service_id: str, service_config) -> None:
+    """Shutdown a service using Semaphore automation."""
+    try:
+        # Get Semaphore client
+        config = _get_config()
+        semaphore_client = get_semaphore_client(config.semaphore_base_url)
+
+        if not semaphore_client:
+            logger.log_service_error(service_id, "Semaphore client not available for shutdown")
+            return
+
+        machine_id = getattr(service_config, "semaphore_machine_id", None)
+        if not machine_id:
+            logger.log_service_error(service_id, "No Semaphore machine ID configured for shutdown")
+            return
+
+        logger.log_service_stop(
+            service_id, reason="idle_timeout_semaphore", metadata={"machine_id": machine_id}
+        )
+
+        # Stop the service via Semaphore
+        stop_template_id = getattr(service_config, "semaphore_stop_template_id", 2)
+        task_response = await semaphore_client.stop_service(
+            service_id=service_id, machine_id=machine_id, template_id=stop_template_id
+        )
+
+        if not task_response:
+            logger.log_service_error(service_id, "Failed to start Semaphore shutdown task")
+            return
+
+        # For shutdown, we don't necessarily need to wait for completion
+        # The service is already marked as cold, and Semaphore will handle the shutdown
+        logger.log_service_stop(
+            service_id,
+            reason="semaphore_shutdown_initiated",
+            metadata={"task_id": task_response.task_id, "machine_id": machine_id},
+        )
+
+    except Exception as e:
+        logger.log_service_error(service_id, f"Semaphore shutdown failed: {e}")
 
 
 def _get_idle_timeout_ms(service_id: str) -> int:
@@ -1064,6 +1192,20 @@ def _idle_monitor_loop():
                     service_id=sid,
                     labels={"from": old_state, "to": "cold", "reason": "idle_timeout"},
                 )
+
+                # Trigger Semaphore shutdown if enabled
+                service_config = _get_config().services.get(sid, _get_config().services["ollama"])
+                if getattr(service_config, "semaphore_enabled", False):
+                    # Schedule shutdown task in thread-safe way
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(_shutdown_service_with_semaphore(sid, service_config))
+                    except RuntimeError:
+                        # No event loop running, skip Semaphore shutdown
+                        logger.log_service_error(
+                            sid, "No event loop available for Semaphore shutdown"
+                        )
+
         time.sleep(check_interval_ms / 1000.0)
 
 

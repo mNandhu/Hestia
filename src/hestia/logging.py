@@ -73,6 +73,14 @@ class EventType(Enum):
     AUTH_SUCCESS = "auth_success"
     AUTH_FAILURE = "auth_failure"
 
+    # Semaphore automation events
+    SEMAPHORE_REQUEST = "semaphore_request"
+    SEMAPHORE_RESPONSE = "semaphore_response"
+    SEMAPHORE_ERROR = "semaphore_error"
+    SEMAPHORE_TASK_START = "semaphore_task_start"
+    SEMAPHORE_TASK_COMPLETE = "semaphore_task_complete"
+    SEMAPHORE_TASK_TIMEOUT = "semaphore_task_timeout"
+
 
 class StructuredFormatter(logging.Formatter):
     """Custom formatter for structured JSON logging."""
@@ -506,6 +514,86 @@ class HestiaLogger:
             message,
             service_id=service_id,
             duration_ms=response_time_ms,
+            metadata=base_meta,
+            **kwargs,
+        )
+
+    def log_semaphore_request(
+        self,
+        action: str,
+        service_id: str,
+        machine_id: Optional[str] = None,
+        url: Optional[str] = None,
+        **kwargs,
+    ):
+        """Log Semaphore API request."""
+        message = f"Semaphore {action} request for {service_id}"
+        if machine_id:
+            message += f" on {machine_id}"
+
+        base_meta = {"action": action, "machine_id": machine_id, "url": url}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            base_meta.update(extra_meta)
+
+        self.log_event(
+            EventType.SEMAPHORE_REQUEST,
+            message,
+            service_id=service_id,
+            metadata=base_meta,
+            **kwargs,
+        )
+
+    def log_semaphore_response(
+        self,
+        action: str,
+        service_id: str,
+        task_id: str,
+        status: str,
+        **kwargs,
+    ):
+        """Log Semaphore API response."""
+        message = f"Semaphore {action} response for {service_id}: {status} (task {task_id})"
+
+        base_meta = {"action": action, "task_id": task_id, "task_status": status}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            base_meta.update(extra_meta)
+
+        self.log_event(
+            EventType.SEMAPHORE_RESPONSE,
+            message,
+            service_id=service_id,
+            metadata=base_meta,
+            **kwargs,
+        )
+
+    def log_semaphore_error(
+        self,
+        action: str,
+        service_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        error: str = "",
+        **kwargs,
+    ):
+        """Log Semaphore API error."""
+        message = f"Semaphore {action} error"
+        if service_id:
+            message += f" for {service_id}"
+        if task_id:
+            message += f" (task {task_id})"
+        if error:
+            message += f": {error}"
+
+        base_meta = {"action": action, "task_id": task_id, "error": error}
+        extra_meta = kwargs.pop("metadata", None)
+        if extra_meta:
+            base_meta.update(extra_meta)
+
+        self.log_event(
+            EventType.SEMAPHORE_ERROR,
+            message,
+            service_id=service_id,
             metadata=base_meta,
             **kwargs,
         )

@@ -2,6 +2,32 @@ openapi: 3.0.3
 info:
   title: Hestia Gateway API
   version: 0.1.0
+  description: |
+    Hestia is an intelligent service gateway that provides transparent proxying, 
+    automatic service lifecycle management, and optional remote automation via Semaphore.
+    
+    **Key Features:**
+    - **Transparent Proxying**: Forward requests to any configured service
+    - **Cold Start Management**: Automatically start services on first request
+    - **Queue Management**: Handle requests during service startup
+    - **Idle Shutdown**: Automatically stop services after inactivity
+    - **Semaphore Integration**: Remote service orchestration via Ansible automation
+    - **Health Monitoring**: Service readiness detection and health checks
+    - **Metrics & Observability**: Comprehensive request and service metrics
+    
+    **Semaphore Automation:**
+    When services are configured with `semaphore_enabled: true`, Hestia can:
+    - Automatically provision cloud VMs when services are accessed
+    - Start/stop services on remote machines based on demand  
+    - Manage GPU resources efficiently with automated scheduling
+    - Implement cost optimization through intelligent startup/shutdown
+    
+  contact:
+    name: Hestia Support
+    url: https://github.com/mNandhu/Hestia-SSD
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 servers:
   - url: http://localhost:8080
 paths:
@@ -12,6 +38,10 @@ paths:
         required: true
         schema:
           type: string
+        description: |
+          Service identifier as configured in hestia_config.yml or via environment variables.
+          Examples: 'ollama', 'stable-diffusion', 'my-cloud-service'
+        example: "ollama"
       - in: path
         name: proxyPath
         required: true
@@ -19,13 +49,87 @@ paths:
           type: string
         style: simple
         explode: false
+        description: |
+          Path to forward to the target service. This will be appended to the service's base_url.
+          For Semaphore-enabled services, this request may trigger remote automation.
+        example: "api/tags"
     get:
       summary: Transparent proxy GET to service path
+      description: |
+        Forward a GET request to the specified service. 
+        
+        **Behavior:**
+        - If service is running: immediate proxy to target
+        - If service is cold: trigger startup process and queue request
+        - If Semaphore enabled: run Ansible automation to start service
+        - If health check configured: wait for health check to pass
+        - If warmup delay configured: wait for warmup period
+        
+        **Response time:** Depends on service startup method
+        - Running service: ~10-100ms
+        - Local startup: 1-30 seconds  
+        - Semaphore automation: 30 seconds - 15 minutes (cloud/VM provisioning)
+        
+        **Examples:**
+        - `GET /services/ollama/api/tags` → proxy to `http://localhost:11434/api/tags`
+        - `GET /services/cloud-ml/health` → may provision AWS VM then proxy
       security:
         - ApiKeyAuth: []
       responses:
         '200':
-          description: Proxied response
+          description: Proxied response from target service
+          content:
+            application/json:
+              schema:
+                type: object
+              examples:
+                ollama_models:
+                  summary: Ollama models response
+                  value:
+                    models:
+                      - name: "llama2:latest"
+                        size: 3826793677
+        '202':
+          description: |
+            Request accepted and queued. Service is starting up.
+            This typically happens when:
+            - Service is cold and startup is in progress
+            - Semaphore automation is running
+            - Health check is pending
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  queue_position:
+                    type: integer
+                  estimated_wait_ms:
+                    type: integer
+              example:
+                message: "Service starting, request queued"
+                queue_position: 1
+                estimated_wait_ms: 30000
+        '503':
+          description: |
+            Service unavailable. This can occur when:
+            - Service startup failed
+            - Semaphore automation failed
+            - Service is overloaded (queue full)
+            - Network connectivity issues
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  retry_after_ms:
+                    type: integer
+              example:
+                error: "Service startup failed"
+                retry_after_ms: 60000
     post:
       summary: Transparent proxy POST to service path
       security:
@@ -114,19 +218,75 @@ paths:
   /v1/services/{serviceId}/status:
     get:
       summary: Get service status and readiness
+      description: |
+        Get the current status of a service, including automation state.
+        
+        **For Semaphore-enabled services:**
+        - May trigger a health probe if service is cold and health_url is configured
+        - Returns automation-related status information
+        - Shows active Semaphore tasks if any
+        
+        **Response includes:**
+        - Service state (hot/cold/starting/stopping)
+        - Readiness status
+        - Queue information
+        - Semaphore automation status (if enabled)
       parameters:
         - in: path
           name: serviceId
           required: true
           schema:
             type: string
+          description: Service identifier
+          example: "ollama"
       responses:
         '200':
-          description: Current status
+          description: Current service status
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServiceStatus'
+              examples:
+                local_service_ready:
+                  summary: Local service ready
+                  value:
+                    serviceId: "ollama"
+                    state: "hot"
+                    readiness: "ready"
+                    machineId: "local"
+                    queuePending: 0
+                    automation:
+                      enabled: false
+                semaphore_service_cold:
+                  summary: Semaphore service (cold)
+                  value:
+                    serviceId: "cloud-ml"
+                    state: "cold"
+                    readiness: "not_ready" 
+                    machineId: "aws-gpu-instance"
+                    queuePending: 0
+                    automation:
+                      enabled: true
+                      provider: "semaphore"
+                      machine_id: "aws-gpu-instance"
+                      last_task: null
+                semaphore_service_starting:
+                  summary: Semaphore service (starting)
+                  value:
+                    serviceId: "cloud-ml"
+                    state: "starting"
+                    readiness: "not_ready"
+                    machineId: "aws-gpu-instance"
+                    queuePending: 3
+                    automation:
+                      enabled: true
+                      provider: "semaphore"
+                      machine_id: "aws-gpu-instance"
+                      current_task:
+                        task_id: "task-123"
+                        status: "running"
+                        template_id: 10
+                        started_at: "2025-09-10T12:30:00Z"
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -169,11 +329,99 @@ components:
       properties:
         serviceId:
           type: string
+          description: Service identifier
+          example: "ollama"
         state:
           type: string
           enum: [hot, cold, starting, stopping]
+          description: |
+            Current service lifecycle state:
+            - `hot`: Service is running and ready
+            - `cold`: Service is stopped/not running
+            - `starting`: Service startup in progress (may include Semaphore automation)
+            - `stopping`: Service shutdown in progress
+          example: "hot"
         machineId:
           type: string
+          description: Machine or instance identifier where service runs
+          example: "local"
         readiness:
           type: string
           enum: [ready, not_ready]
+          description: |
+            Service readiness for handling requests:
+            - `ready`: Service can handle requests immediately
+            - `not_ready`: Service is starting up or not available
+          example: "ready"
+        queuePending:
+          type: integer
+          description: Number of requests currently queued for this service
+          minimum: 0
+          example: 0
+        automation:
+          type: object
+          description: Automation system status (if enabled)
+          properties:
+            enabled:
+              type: boolean
+              description: Whether automation is enabled for this service
+              example: true
+            provider:
+              type: string
+              enum: [semaphore]
+              description: Automation provider type
+              example: "semaphore"
+            machine_id:
+              type: string
+              description: Target machine identifier in automation system
+              example: "aws-gpu-instance"
+            current_task:
+              type: object
+              nullable: true
+              description: Currently running automation task (if any)
+              properties:
+                task_id:
+                  type: string
+                  description: Automation task identifier
+                  example: "task-123"
+                status:
+                  type: string
+                  enum: [running, success, error, pending]
+                  description: Current task status
+                  example: "running"
+                template_id:
+                  type: integer
+                  description: Automation template/playbook ID
+                  example: 10
+                started_at:
+                  type: string
+                  format: date-time
+                  description: Task start timestamp
+                  example: "2025-09-10T12:30:00Z"
+            last_task:
+              type: object
+              nullable: true
+              description: Most recent completed automation task
+              properties:
+                task_id:
+                  type: string
+                  example: "task-122"
+                status:
+                  type: string
+                  enum: [success, error]
+                  example: "success"
+                template_id:
+                  type: integer
+                  example: 10
+                started_at:
+                  type: string
+                  format: date-time
+                  example: "2025-09-10T12:25:00Z"
+                completed_at:
+                  type: string
+                  format: date-time
+                  example: "2025-09-10T12:28:30Z"
+                duration_ms:
+                  type: integer
+                  description: Task duration in milliseconds
+                  example: 210000

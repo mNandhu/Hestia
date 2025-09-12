@@ -1,12 +1,20 @@
 # Hestia Gateway Configuration
 # 
 # This file configures services that Hestia will proxy to, including
-# startup policies, health checks, timeouts, and queue settings.
+# startup policies, health checks, timeouts, queue settings, and Semaphore
+# automation integration for remote service orchestration.
 #
-# Environment variables can override any setting for the 'ollama' service:
-# - OLLAMA_BASE_URL, OLLAMA_RETRY_COUNT, OLLAMA_RETRY_DELAY_MS, etc.
+# Environment variables can override any setting for any service:
+# - <SERVICE>_BASE_URL, <SERVICE>_RETRY_COUNT, <SERVICE>_SEMAPHORE_ENABLED, etc.
+# - SEMAPHORE_BASE_URL for global Semaphore server configuration
 #
 # For documentation see: https://github.com/mNandhu/Hestia-SSD
+
+# Global Semaphore Configuration
+# Set SEMAPHORE_BASE_URL environment variable to enable automation
+# Example: export SEMAPHORE_BASE_URL="http://semaphore:3000"
+semaphore_base_url: null      # Override with SEMAPHORE_BASE_URL env var
+semaphore_timeout: 30         # HTTP timeout for Semaphore API calls (seconds)
 
 services:
   # Ollama - Large Language Model API Server
@@ -160,6 +168,98 @@ services:
     queue_size: 500
     request_timeout_seconds: 60
 
+  # Semaphore - Automation Server (remote orchestration)
+  semaphore:
+    base_url: "http://localhost:3000"
+    health_url: "http://localhost:3000/api/ping"
+    retry_count: 2
+    retry_delay_ms: 1000
+    warmup_ms: 5000
+    idle_timeout_ms: 0         # Never auto-shutdown automation server
+    queue_size: 50
+    request_timeout_seconds: 30
+    
+    # Semaphore automation configuration (self-managed)
+    semaphore_enabled: false   # Don't use Semaphore to manage Semaphore itself
+    
+  # Example: Cloud VM Service with Semaphore Automation
+  cloud-ollama:
+    base_url: "http://cloud-vm.example.com:11434"
+    
+    # Traditional settings still apply
+    retry_count: 3
+    retry_delay_ms: 2000
+    warmup_ms: 0               # Semaphore handles startup timing
+    idle_timeout_ms: 1800000   # Auto-shutdown after 30 minutes to save costs
+    queue_size: 100
+    request_timeout_seconds: 180  # Longer timeout for cloud startup
+    
+    # Semaphore automation settings
+    semaphore_enabled: true                    # Enable remote orchestration
+    semaphore_machine_id: "cloud-vm-01"       # Target machine in Semaphore
+    semaphore_start_template_id: 1            # Semaphore template for startup
+    semaphore_stop_template_id: 2             # Semaphore template for shutdown
+    semaphore_task_timeout: 300               # Max time to wait for tasks (seconds)
+    semaphore_poll_interval: 2.0              # Status polling interval (seconds)
+    
+  # Example: GPU Server with Semaphore Management
+  gpu-stable-diffusion:
+    base_url: "http://gpu-server.local:7860"
+    
+    retry_count: 2
+    retry_delay_ms: 5000
+    warmup_ms: 0               # Semaphore manages startup
+    idle_timeout_ms: 900000    # 15 minutes (GPU resources are expensive)
+    queue_size: 10
+    request_timeout_seconds: 600  # 10 minutes for GPU service startup
+    
+    # Semaphore configuration for GPU server
+    semaphore_enabled: true
+    semaphore_machine_id: "gpu-server-01"
+    semaphore_start_template_id: 3            # GPU service startup template
+    semaphore_stop_template_id: 4             # GPU service shutdown template
+    semaphore_task_timeout: 600               # 10 minutes for GPU startup
+    semaphore_poll_interval: 5.0              # Slower polling for heavy workloads
+    
+  # Example: Development Environment with Auto-provisioning
+  dev-workspace:
+    base_url: "http://dev-vm.local:8080"
+    
+    retry_count: 1
+    retry_delay_ms: 1000
+    warmup_ms: 0
+    idle_timeout_ms: 300000    # 5 minutes for development
+    queue_size: 25
+    request_timeout_seconds: 120
+    
+    # Development server provisioning
+    semaphore_enabled: true
+    semaphore_machine_id: "dev-vm-pool"      # Dynamic VM allocation
+    semaphore_start_template_id: 10          # VM provisioning + service start
+    semaphore_stop_template_id: 11           # Service stop + VM deallocation
+    semaphore_task_timeout: 180              # 3 minutes for VM provisioning
+    semaphore_poll_interval: 3.0
+    
+  # Example: Multi-region Service with Intelligent Routing
+  global-api:
+    # Primary URL - will be used once service is running
+    base_url: "http://api.us-east.example.com:8080"
+    
+    retry_count: 2
+    retry_delay_ms: 1000
+    warmup_ms: 0
+    idle_timeout_ms: 0         # Keep global services running
+    queue_size: 200
+    request_timeout_seconds: 90
+    
+    # Semaphore will provision the closest available region
+    semaphore_enabled: true
+    semaphore_machine_id: "global-api-us-east"  # Primary region
+    semaphore_start_template_id: 20             # Region-aware deployment
+    semaphore_stop_template_id: 21              # Graceful region shutdown
+    semaphore_task_timeout: 180
+    semaphore_poll_interval: 2.0
+
 # Configuration Tips:
 #
 # 1. Service Types:
@@ -167,20 +267,53 @@ services:
 #    - ML/AI Services: long startup, longer idle times (GPU resources)
 #    - Databases: high reliability, no auto-shutdown, fallbacks
 #    - Development: fast startup, aggressive shutdown
+#    - Cloud/Remote: Semaphore automation for cost optimization
 #
 # 2. Timeout Guidelines:
-#    - warmup_ms: 1-2s (web), 5-15s (ML), 30s+ (large models)
+#    - warmup_ms: 1-2s (web), 5-15s (ML), 30s+ (large models), 0 (Semaphore managed)
 #    - idle_timeout_ms: 5-10min (web), 15-30min (ML), 0 (critical services)
-#    - request_timeout_seconds: 15-30s (web), 60-180s (ML)
+#    - request_timeout_seconds: 15-30s (web), 60-180s (ML), 60-600s (cloud)
+#    - semaphore_task_timeout: 60-180s (web), 300-600s (ML/GPU), 60-120s (VM provisioning)
 #
 # 3. Queue Configuration:
 #    - queue_size: 10-50 (resource-intensive), 100-500 (lightweight)
 #    - Higher queues for services with longer startup times
+#    - Consider cloud provisioning time for Semaphore-managed services
 #
 # 4. Health Checks:
 #    - Always use health_url when available for faster readiness detection
 #    - Fallback to warmup_ms for services without health endpoints
+#    - Semaphore-managed services: set warmup_ms=0, let Semaphore handle timing
 #
-# 5. Environment Override (Ollama only):
-#    export OLLAMA_BASE_URL="http://remote-ollama:11434"
-#    export OLLAMA_IDLE_TIMEOUT_MS=600000
+# 5. Semaphore Integration:
+#    - semaphore_enabled: true activates remote orchestration
+#    - semaphore_machine_id: target machine/cluster identifier in Semaphore
+#    - semaphore_*_template_id: Ansible playbook templates for start/stop operations
+#    - Use longer timeouts for cloud/VM provisioning scenarios
+#    - Poll intervals: 1-2s (fast), 2-5s (normal), 5-10s (heavy workloads)
+#
+# 6. Environment Override Examples:
+#    # Enable Semaphore globally
+#    export SEMAPHORE_BASE_URL="http://semaphore.local:3000"
+#    
+#    # Configure any service via environment variables
+#    export MYSERVICE_BASE_URL="http://target.local:8080"
+#    export MYSERVICE_SEMAPHORE_ENABLED=true
+#    export MYSERVICE_SEMAPHORE_MACHINE_ID="my-server"
+#    export MYSERVICE_IDLE_TIMEOUT_MS=600000
+#
+# 7. Semaphore Templates Setup:
+#    - Template 1: Generic service startup (systemctl start, docker run, etc.)
+#    - Template 2: Generic service shutdown (systemctl stop, docker stop, etc.)
+#    - Template 3: GPU service startup (nvidia-docker, model loading)
+#    - Template 4: GPU service shutdown (graceful model unload + stop)
+#    - Template 10: VM provisioning + service deployment
+#    - Template 11: Service shutdown + VM deallocation
+#    - Template 20: Multi-region deployment with load balancer updates
+#    - Template 21: Multi-region shutdown with traffic draining
+#
+# 8. Cost Optimization Patterns:
+#    - Cloud Services: aggressive idle_timeout_ms (5-30 min) + Semaphore automation
+#    - GPU Services: moderate idle_timeout_ms (15-60 min) + shared resource management
+#    - Development: very aggressive idle_timeout_ms (1-5 min) + quick provisioning
+#    - Production: idle_timeout_ms=0 (always on) or very long timeouts (2+ hours)
