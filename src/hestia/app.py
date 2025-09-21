@@ -38,6 +38,9 @@ _request_queue = RequestQueue()
 _services: dict[str, dict] = {}
 _IDLE_THREAD_STARTED = False
 
+# Global reference to the main asyncio event loop for thread-safe coroutine scheduling
+_MAIN_LOOP: Optional[asyncio.AbstractEventLoop] = None
+
 # Load strategies and keep instances cache
 _strategy_registry = StrategyRegistry()
 load_strategies("strategies")
@@ -45,6 +48,14 @@ _strategy_instances: dict[str, Any] = {}
 
 # Log gateway startup
 logger.log_event(EventType.GATEWAY_START, "Hestia Gateway starting up")
+
+
+@app.on_event("startup")
+async def capture_main_event_loop():
+    """Capture the main asyncio event loop for thread-safe coroutine scheduling."""
+    global _MAIN_LOOP
+    _MAIN_LOOP = asyncio.get_running_loop()
+    logger.info("Main event loop captured for Semaphore shutdown threading")
 
 
 def _get_config():
@@ -973,7 +984,13 @@ async def _start_service_with_semaphore(
     """Start a service using Semaphore automation."""
     # Get Semaphore client
     config = _get_config()
-    semaphore_client = get_semaphore_client(config.semaphore_base_url)
+    semaphore_client = get_semaphore_client(
+        base_url=config.semaphore_base_url,
+        api_key=config.semaphore_api_key,
+        username=config.semaphore_username,
+        password=config.semaphore_password,
+        timeout=config.semaphore_timeout,
+    )
 
     if not semaphore_client:
         logger.log_service_error(
@@ -1108,7 +1125,13 @@ async def _shutdown_service_with_semaphore(service_id: str, service_config) -> N
     try:
         # Get Semaphore client
         config = _get_config()
-        semaphore_client = get_semaphore_client(config.semaphore_base_url)
+        semaphore_client = get_semaphore_client(
+            base_url=config.semaphore_base_url,
+            api_key=config.semaphore_api_key,
+            username=config.semaphore_username,
+            password=config.semaphore_password,
+            timeout=config.semaphore_timeout,
+        )
 
         if not semaphore_client:
             logger.log_service_error(service_id, "Semaphore client not available for shutdown")
@@ -1196,14 +1219,19 @@ def _idle_monitor_loop():
                 # Trigger Semaphore shutdown if enabled
                 service_config = _get_config().services.get(sid, _get_config().services["ollama"])
                 if getattr(service_config, "semaphore_enabled", False):
-                    # Schedule shutdown task in thread-safe way
-                    try:
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(_shutdown_service_with_semaphore(sid, service_config))
-                    except RuntimeError:
-                        # No event loop running, skip Semaphore shutdown
+                    # Schedule shutdown task on main loop in thread-safe way
+                    if _MAIN_LOOP and not _MAIN_LOOP.is_closed():
+                        try:
+                            asyncio.run_coroutine_threadsafe(
+                                _shutdown_service_with_semaphore(sid, service_config), _MAIN_LOOP
+                            )
+                        except Exception as e:
+                            logger.log_service_error(
+                                sid, f"Failed to schedule Semaphore shutdown: {e}"
+                            )
+                    else:
                         logger.log_service_error(
-                            sid, "No event loop available for Semaphore shutdown"
+                            sid, "Main event loop not available for Semaphore shutdown"
                         )
 
         time.sleep(check_interval_ms / 1000.0)
