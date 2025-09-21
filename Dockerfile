@@ -1,5 +1,5 @@
-# Base image with uv pre-installed (Python 3.12 on Alpine)
-FROM ghcr.io/astral-sh/uv:python3.12-alpine
+# Base image with uv pre-installed (Python 3.13 on Alpine)
+FROM ghcr.io/astral-sh/uv:python3.13-alpine
 
 # Set working directory
 WORKDIR /app
@@ -20,4 +20,4 @@ RUN uv pip install --no-deps .
 EXPOSE 8080
 
 # Default command to run the FastAPI app using the installed package
-CMD ["uv", "run", "uvicorn", "hestia.app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uv", "run", "uvicorn", "hestia.app:app", "--host", "0.0.0.0", "--port", "80"]
