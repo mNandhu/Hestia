@@ -72,6 +72,15 @@ class HestiaConfig(BaseModel):
     semaphore_timeout: int = Field(
         default=30, description="HTTP timeout for Semaphore API calls (seconds)"
     )
+    semaphore_api_key: Optional[str] = Field(
+        default=None, description="Semaphore API key for authentication"
+    )
+    semaphore_username: Optional[str] = Field(
+        default=None, description="Semaphore username for basic auth"
+    )
+    semaphore_password: Optional[str] = Field(
+        default=None, description="Semaphore password for basic auth"
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -114,6 +123,18 @@ def load_config(config_path: str = "hestia_config.yml") -> HestiaConfig:
             config_data["semaphore_timeout"] = int(semaphore_timeout)
         except ValueError:
             print(f"Warning: Invalid integer value for SEMAPHORE_TIMEOUT: {semaphore_timeout}")
+
+    semaphore_api_key = os.getenv("SEMAPHORE_API_KEY")
+    if semaphore_api_key:
+        config_data["semaphore_api_key"] = semaphore_api_key
+
+    semaphore_username = os.getenv("SEMAPHORE_USERNAME")
+    if semaphore_username:
+        config_data["semaphore_username"] = semaphore_username
+
+    semaphore_password = os.getenv("SEMAPHORE_PASSWORD")
+    if semaphore_password:
+        config_data["semaphore_password"] = semaphore_password
 
     # Load services from environment variables
     # Format: <SERVICE_ID>_<CONFIG_KEY> = value

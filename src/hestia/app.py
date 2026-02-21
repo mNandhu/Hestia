@@ -986,10 +986,8 @@ async def _start_service_with_semaphore(
     config = _get_config()
     semaphore_client = get_semaphore_client(
         base_url=config.semaphore_base_url,
-        api_key=config.semaphore_api_key,
         username=config.semaphore_username,
         password=config.semaphore_password,
-        timeout=config.semaphore_timeout,
     )
 
     if not semaphore_client:
@@ -1127,10 +1125,8 @@ async def _shutdown_service_with_semaphore(service_id: str, service_config) -> N
         config = _get_config()
         semaphore_client = get_semaphore_client(
             base_url=config.semaphore_base_url,
-            api_key=config.semaphore_api_key,
             username=config.semaphore_username,
             password=config.semaphore_password,
-            timeout=config.semaphore_timeout,
         )
 
         if not semaphore_client:

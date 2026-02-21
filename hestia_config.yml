@@ -13,8 +13,21 @@
 # Global Semaphore Configuration
 # Set SEMAPHORE_BASE_URL environment variable to enable automation
 # Example: export SEMAPHORE_BASE_URL="http://semaphore:3000"
-semaphore_base_url: null      # Override with SEMAPHORE_BASE_URL env var
+semaphore_base_url: http://localhost:3000      # Override with SEMAPHORE_BASE_URL env var
 semaphore_timeout: 30         # HTTP timeout for Semaphore API calls (seconds)
+
+# Semaphore Authentication (required for API access)
+# Option 1: API Key authentication (recommended)
+# semaphore_api_key: your-api-key-here      # Override with SEMAPHORE_API_KEY env var
+#
+# Option 2: Basic authentication (username/password)
+# semaphore_username: admin                 # Override with SEMAPHORE_USERNAME env var  
+# semaphore_password: admin                 # Override with SEMAPHORE_PASSWORD env var
+#
+# Environment variable setup examples:
+# export SEMAPHORE_API_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+# export SEMAPHORE_USERNAME="admin"
+# export SEMAPHORE_PASSWORD="your-password"
 
 services:
   # Ollama - Large Language Model API Server
@@ -302,7 +315,18 @@ services:
 #    export MYSERVICE_SEMAPHORE_MACHINE_ID="my-server"
 #    export MYSERVICE_IDLE_TIMEOUT_MS=600000
 #
-# 7. Semaphore Templates Setup:
+# 7. Semaphore Authentication Setup:
+#    # Get API key from Semaphore UI (User Settings > API Tokens)
+#    export SEMAPHORE_API_KEY="your-api-key-from-semaphore-ui"
+#    
+#    # Alternative: Basic authentication 
+#    export SEMAPHORE_USERNAME="admin"
+#    export SEMAPHORE_PASSWORD="your-password"
+#    
+#    # Test authentication
+#    curl -H "Authorization: Bearer $SEMAPHORE_API_KEY" http://semaphore:3000/api/ping
+#
+# 8. Semaphore Templates Setup:
 #    - Template 1: Generic service startup (systemctl start, docker run, etc.)
 #    - Template 2: Generic service shutdown (systemctl stop, docker stop, etc.)
 #    - Template 3: GPU service startup (nvidia-docker, model loading)
@@ -312,7 +336,7 @@ services:
 #    - Template 20: Multi-region deployment with load balancer updates
 #    - Template 21: Multi-region shutdown with traffic draining
 #
-# 8. Cost Optimization Patterns:
+# 9. Cost Optimization Patterns:
 #    - Cloud Services: aggressive idle_timeout_ms (5-30 min) + Semaphore automation
 #    - GPU Services: moderate idle_timeout_ms (15-60 min) + shared resource management
 #    - Development: very aggressive idle_timeout_ms (1-5 min) + quick provisioning

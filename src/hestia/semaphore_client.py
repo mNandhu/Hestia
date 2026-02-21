@@ -38,17 +38,57 @@ class SemaphoreClient:
     Provides methods to start/stop services and poll task status.
     """
 
-    def __init__(self, base_url: str, timeout: int = 30):
+    def __init__(self, base_url: str, timeout: int = 30, username: Optional[str] = None, password: Optional[str] = None):
         """
         Initialize Semaphore client.
 
         Args:
             base_url: Semaphore server URL (e.g., http://semaphore:3000)
             timeout: HTTP request timeout in seconds
+            username: Username for session authentication
+            password: Password for session authentication
         """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.username = username
+        self.password = password
         self.logger = get_logger("hestia.semaphore")
+
+    async def _get_authenticated_client(self) -> Optional[httpx.AsyncClient]:
+        """Get an authenticated HTTP client with session cookies."""
+        client = httpx.AsyncClient(timeout=self.timeout)
+        
+        if self.username and self.password:
+            try:
+                # Login to get session cookie
+                login_data = {
+                    "auth": self.username,
+                    "password": self.password
+                }
+                
+                response = await client.post(f"{self.base_url}/api/auth/login", json=login_data)
+                
+                if response.status_code != 204:
+                    self.logger.log_semaphore_error(
+                        action="authentication",
+                        error=f"Login failed with status {response.status_code}"
+                    )
+                    await client.aclose()
+                    return None
+                
+                # Session cookie is automatically stored in client
+                return client
+                
+            except Exception as e:
+                self.logger.log_semaphore_error(
+                    action="authentication", 
+                    error=f"Authentication failed: {e}"
+                )
+                await client.aclose()
+                return None
+        
+        # If no credentials, return unauthenticated client (might work for some endpoints)
+        return client
 
     async def start_service(
         self,
@@ -86,7 +126,11 @@ class SemaphoreClient:
                 action="start_service", service_id=service_id, machine_id=machine_id, url=url
             )
 
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            client = await self._get_authenticated_client()
+            if not client:
+                return None
+
+            try:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
 
@@ -105,6 +149,8 @@ class SemaphoreClient:
                 )
 
                 return task_response
+            finally:
+                await client.aclose()
 
         except Exception as e:
             self.logger.log_semaphore_error(
@@ -148,7 +194,11 @@ class SemaphoreClient:
                 action="stop_service", service_id=service_id, machine_id=machine_id, url=url
             )
 
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            client = await self._get_authenticated_client()
+            if not client:
+                return None
+
+            try:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
 
@@ -167,6 +217,8 @@ class SemaphoreClient:
                 )
 
                 return task_response
+            finally:
+                await client.aclose()
 
         except Exception as e:
             self.logger.log_semaphore_error(
@@ -187,7 +239,11 @@ class SemaphoreClient:
         url = f"{self.base_url}/api/project/1/tasks/{task_id}"
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            client = await self._get_authenticated_client()
+            if not client:
+                return None
+
+            try:
                 response = await client.get(url)
                 response.raise_for_status()
 
@@ -197,6 +253,8 @@ class SemaphoreClient:
                     status=data.get("status", "unknown"),
                     message=data.get("message"),
                 )
+            finally:
+                await client.aclose()
 
         except Exception as e:
             self.logger.log_semaphore_error(action="get_task_status", task_id=task_id, error=str(e))
@@ -246,12 +304,14 @@ class SemaphoreClient:
 _semaphore_client: Optional[SemaphoreClient] = None
 
 
-def get_semaphore_client(base_url: Optional[str] = None) -> Optional[SemaphoreClient]:
+def get_semaphore_client(base_url: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None) -> Optional[SemaphoreClient]:
     """
     Get global Semaphore client instance.
 
     Args:
         base_url: Semaphore server URL, if None uses environment variable
+        username: Username for authentication
+        password: Password for authentication
 
     Returns:
         Semaphore client instance, or None if not configured
@@ -259,7 +319,7 @@ def get_semaphore_client(base_url: Optional[str] = None) -> Optional[SemaphoreCl
     global _semaphore_client
 
     if _semaphore_client is None and base_url:
-        _semaphore_client = SemaphoreClient(base_url)
+        _semaphore_client = SemaphoreClient(base_url, username=username, password=password)
 
     return _semaphore_client
 
