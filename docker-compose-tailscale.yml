@@ -1,0 +1,51 @@
+services:
+  ts-authkey:
+    image: tailscale/tailscale:latest
+    container_name: ts-authkey
+    hostname: hestia
+    environment:
+      - TS_AUTHKEY=your-ts-auth-key
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+    volumes:
+      - ${PWD}/ts-authkey/state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+    restart: unless-stopped
+
+  hestia:
+    network_mode: "service:ts-authkey"
+    build: .
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SEMAPHORE_BASE_URL=http://localhost:3000
+      - SEMAPHORE_USERNAME=admin
+      - SEMAPHORE_PASSWORD=admin
+    volumes:
+      - ./strategies:/app/strategies
+      - ./hestia_config.yml:/app/hestia_config.yml
+    depends_on:
+      - semaphore
+
+  semaphore:
+    image: semaphoreui/semaphore:latest
+    network_mode: "service:ts-authkey"
+    environment:
+      - SEMAPHORE_DB_DIALECT=bolt
+      - SEMAPHORE_ADMIN=admin
+      - SEMAPHORE_ADMIN_PASSWORD=admin
+      - SEMAPHORE_ADMIN_NAME=Administrator
+      - SEMAPHORE_ADMIN_EMAIL=admin@example.com
+      # optional but recommended for secrets encryption:
+      - SEMAPHORE_ACCESS_KEY_ENCRYPTION=your-encryption-key
+    volumes:
+      - semaphore_config:/etc/semaphore
+      - semaphore_data:/var/lib/semaphore
+    restart: unless-stopped
+
+volumes:
+  semaphore_config: {}
+  semaphore_data: {}
+  hestia_sqlite: {}

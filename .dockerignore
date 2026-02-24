@@ -1,2 +1,9 @@
 # Exclude the project virtual environment from image builds
 .venv
+
+# Exclude Tailscale state directory 
+ts-authkey/
+
+# Exclude other runtime files
+*.db
+*.log
