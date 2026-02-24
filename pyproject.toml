@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "hestia"
 version = "0.1.0"
@@ -32,6 +36,9 @@ line-length = 100
 
 [tool.ruff]
 line-length = 100
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hestia"]
 
 [project.scripts]
 hestia-api = "hestia.app:run"
