@@ -126,16 +126,16 @@ def test_transparent_proxy_health_tracking(monkeypatch):
 
     with respx.mock(assert_all_called=True) as mock:
         # First request: inst_a fails
-        mock.get(f"{inst_a}/v1/models").respond(503, json={"error": "service down"})
+        mock.get(f"{inst_a}/api/v1/models").respond(503, json={"error": "service down"})
 
         # Second request: inst_b succeeds
-        mock.get(f"{inst_b}/v1/models").respond(200, json={"models": ["test-model"]})
+        mock.get(f"{inst_b}/api/v1/models").respond(200, json={"models": ["test-model"]})
 
         # First request should fail with inst_a
-        resp1 = client.get(f"/services/{service_id}/v1/models")
+        resp1 = client.get(f"/services/{service_id}/api/v1/models")
         assert resp1.status_code == 503
 
         # Second request should succeed with inst_b
-        resp2 = client.get(f"/services/{service_id}/v1/models")
+        resp2 = client.get(f"/services/{service_id}/api/v1/models")
         assert resp2.status_code == 200
         assert resp2.json()["models"] == ["test-model"]

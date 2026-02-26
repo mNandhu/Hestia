@@ -32,13 +32,13 @@ docker compose logs -f hestia
 
 ```bash
 # Global gateway status
-curl http://localhost:8080/v1/metrics
+curl http://localhost:8080/api/v1/metrics
 
 # Specific service status
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 
 # Service health probe
-curl http://localhost:8080/v1/services/ollama/start
+curl http://localhost:8080/api/v1/services/ollama/start
 ```
 
 ### Verify Configuration
@@ -63,7 +63,7 @@ uv run python -c "from src.hestia.config import load_config; print(load_config()
 **Diagnosis**:
 ```bash
 # Check service configuration
-curl http://localhost:8080/v1/services/myservice/status
+curl http://localhost:8080/api/v1/services/myservice/status
 
 # Check logs for startup errors
 docker logs hestia | grep "myservice"
@@ -102,7 +102,7 @@ export MYSERVICE_WARMUP_MS=10000
 **Diagnosis**:
 ```bash
 # Monitor service state changes
-watch -n 1 "curl -s http://localhost:8080/v1/services/myservice/status | jq '.state'"
+watch -n 1 "curl -s http://localhost:8080/api/v1/services/myservice/status | jq '.state'"
 
 # Check for error patterns in logs
 docker logs hestia | grep -E "(error|failed|exception)" | grep myservice
@@ -135,10 +135,10 @@ docker logs target-service
 **Diagnosis**:
 ```bash
 # Check queue status
-curl http://localhost:8080/v1/services/myservice/status | jq '.queuePending'
+curl http://localhost:8080/api/v1/services/myservice/status | jq '.queuePending'
 
 # Check if service ever becomes ready
-curl http://localhost:8080/v1/services/myservice/status | jq '.readiness'
+curl http://localhost:8080/api/v1/services/myservice/status | jq '.readiness'
 ```
 
 **Solutions**:
@@ -433,7 +433,7 @@ time curl http://target-service:8080/api
 time curl http://localhost:8080/services/myservice/api
 
 # Check metrics for timing data
-curl http://localhost:8080/v1/metrics | jq '.timers'
+curl http://localhost:8080/api/v1/metrics | jq '.timers'
 ```
 
 **Solutions**:
@@ -469,7 +469,7 @@ export MYSERVICE_SEMAPHORE_POLL_INTERVAL=1.0  # Faster polling
 docker stats hestia
 
 # Check queue sizes
-curl http://localhost:8080/v1/metrics | jq '.services'
+curl http://localhost:8080/api/v1/metrics | jq '.services'
 ```
 
 **Solutions**:
@@ -622,7 +622,7 @@ nslookup target-service
 **Solution**:
 ```bash
 # Check available services
-curl http://localhost:8080/v1/metrics | jq '.services | keys'
+curl http://localhost:8080/api/v1/metrics | jq '.services | keys'
 
 # Add service configuration
 export MYSERVICE_BASE_URL="http://target:8080"
@@ -721,7 +721,7 @@ docker compose up -d
 
 ```bash
 # Clear single service state
-curl -X POST http://localhost:8080/v1/services/myservice/stop
+curl -X POST http://localhost:8080/api/v1/services/myservice/stop
 
 # Or restart Hestia to clear all service state
 docker compose restart hestia
@@ -752,7 +752,7 @@ docker compose version
 
 echo "=== Hestia Status ==="
 docker ps | grep hestia
-curl -s http://localhost:8080/v1/metrics | jq '.'
+curl -s http://localhost:8080/api/v1/metrics | jq '.'
 
 echo "=== Configuration ==="
 env | grep -E "(HESTIA|SEMAPHORE|MYSERVICE)"

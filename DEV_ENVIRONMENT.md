@@ -76,7 +76,7 @@ uv run pytest --cov=src/hestia
 ### API Testing
 ```bash
 # Test Hestia endpoints
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 
 # Test Semaphore API (for T043 development)
 curl http://localhost:3000/api/ping

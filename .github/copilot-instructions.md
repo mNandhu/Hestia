@@ -5,7 +5,7 @@ Purpose: Equip AI coding agents to be productive immediately in this repo. Keep 
 ## Big picture
 - Hestia is a FastAPI gateway that transparently proxies to per-service upstreams and manages lifecycle (cold start, warm/warmup, idle shutdown), metrics, and structured logs.
 - Core pieces:
-  - `src/hestia/app.py`: FastAPI app; endpoints: dispatcher (`POST /v1/requests`), service status/metrics/start, transparent proxy (`/services/{serviceId}/{path}`); readiness/idle state in `_services`.
+  - `src/hestia/app.py`: FastAPI app; endpoints: dispatcher (`POST /api/v1/requests`), service status/metrics/start, transparent proxy (`/services/{serviceId}/{path}`); readiness/idle state in `_services`.
   - `src/hestia/config.py`: YAML + env var config (`hestia_config.yml`), with defaults for `ollama`. Keys include `base_url`, `health_url`, `warmup_ms`, `idle_timeout_ms`, queue sizes, timeouts.
   - `src/hestia/request_queue.py`: Queues requests for cold services; controls startup flag and readiness signalling.
   - `src/hestia/middleware.py`: Structured request logging + metrics.
@@ -24,7 +24,7 @@ Purpose: Equip AI coding agents to be productive immediately in this repo. Keep 
 ## Key behaviors and patterns
 - Transparent proxy: `/services/{serviceId}/{path}` forwards to `base_url` joined with `path`. Large/streaming responses are streamed.
 - Cold start flow: If service not hot/ready, dispatcher or proxy marks service “starting”, queues requests, and kicks `_start_service_async` which uses `health_url` or `warmup_ms` to flip to hot/ready.
-- Status probe: `GET /v1/services/{serviceId}/status` performs a quick health probe when state is cold and `health_url` is set, so pre-running upstreams report hot without needing a proxy request.
+- Status probe: `GET /api/v1/services/{serviceId}/status` performs a quick health probe when state is cold and `health_url` is set, so pre-running upstreams report hot without needing a proxy request.
 - Idle shutdown: Background thread sets hot services to cold after `idle_timeout_ms` of inactivity.
 - Config precedence: `hestia_config.yml` then env vars like `OLLAMA_BASE_URL`, `OLLAMA_HEALTH_URL`, etc. If `services.ollama` missing, defaults are injected.
 - Logging: Use `get_logger(...)` and methods like `log_service_start`, `log_service_ready`, `log_proxy_*`. Avoid writing to `print`; logs are JSON. The handler tolerates pytest shutdown.
@@ -56,7 +56,7 @@ Purpose: Equip AI coding agents to be productive immediately in this repo. Keep 
 ## Examples
 - Probe status when upstream is running:
   - Set `OLLAMA_BASE_URL=http://upstream.local` and `OLLAMA_HEALTH_URL=http://upstream.local/api/tags`
-  - `GET /v1/services/ollama/status` → returns `hot`/`ready` without prior proxy calls (see tests).
+  - `GET /api/v1/services/ollama/status` → returns `hot`/`ready` without prior proxy calls (see tests).
 - Transparent proxy usage:
   - `GET /services/ollama/api/tags` forwards to `base_url/api/tags` with retries/timeout per config.
 

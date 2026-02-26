@@ -30,12 +30,12 @@ T002. [Setup] Initialize `pyproject.toml` and dependencies
 T003. [Contract Tests] Generate failing contract tests from OpenAPI [P]
 - For each endpoint in `contracts/openapi.yaml`, create `tests/contract/test_contract_<name>.py`
 - Validate: route exists, methods allowed, required fields enforced, security when enabled
-- Endpoints: `/services/{serviceId}/{proxyPath}`, `/v1/requests`, `/v1/services/{id}/start`, `/v1/services/{id}/status`
+- Endpoints: `/services/{serviceId}/{proxyPath}`, `/api/v1/requests`, `/api/v1/services/{id}/start`, `/api/v1/services/{id}/status`
 - Dependencies: T002
  - Status: DONE (tests import app and expect 501 for stubs)
 
 T004. [Integration Tests] Define gateway transparency scenarios [P]
-- `tests/integration/test_transparent_proxy.py`: calling `GET /services/ollama/v1/models` returns 200 with mocked downstream
+- `tests/integration/test_transparent_proxy.py`: calling `GET /services/ollama/api/v1/models` returns 200 with mocked downstream
 - Include cold-start path: first call queues until ready
 - Include auth enabled/disabled variants
 - Dependencies: T002
@@ -83,7 +83,7 @@ T012. [Source] Minimal FastAPI app skeleton to load and serve contracts (no busi
  - Status: DONE (implemented at `src/hestia/app.py`)
 
 T013. [Source] Contract routing stubs to make contract tests discover endpoints
-- Implement routes: transparent proxy `/services/{serviceId}/{proxyPath}` (methods GET/POST/PUT/PATCH/DELETE), `/v1/requests`, `/v1/services/{id}/start`, `/v1/services/{id}/status` returning 501
+- Implement routes: transparent proxy `/services/{serviceId}/{proxyPath}` (methods GET/POST/PUT/PATCH/DELETE), `/api/v1/requests`, `/api/v1/services/{id}/start`, `/api/v1/services/{id}/status` returning 501
 - Dependencies: T012; Target: make routing exist but tests still fail on behavior
  - Status: DONE (all endpoints return 501 as stubs)
 
@@ -127,7 +127,7 @@ T021. [Source] Transparent proxy implementation
 - Dependencies: T003, T020
  - Status: DONE (all HTTP methods supported, queue integration for cold services, streaming responses, comprehensive testing)
 
-T022. [Source] Generic POST `/v1/requests` dispatcher
+T022. [Source] Generic POST `/api/v1/requests` dispatcher
 - Accept GatewayRequest, route to service, use queue/strategy engines
 - Dependencies: T003, T020
  - Status: DONE (full dispatcher implementation with queue integration, service startup, comprehensive testing)
@@ -200,7 +200,7 @@ T033. [Tests] Integration tests for strategy-based routing [P]
 
 T034. [Source] Load strategies on startup and wire into request path
 - In `src/hestia/app.py`, load strategies at startup (`load_strategies("strategies")`) and keep a registry reference.
-- In dispatcher (`POST /v1/requests`) and transparent proxy, before constructing target URL:
+- In dispatcher (`POST /api/v1/requests`) and transparent proxy, before constructing target URL:
 	- Build `request_context` (e.g., parsed JSON body fields including `model`, headers, query params, path).
 	- Resolve upstream base URL via configured strategy:
 		- If `routing.by_model` exists, prefer exact match.
@@ -244,7 +244,7 @@ T039. [Docs] Quickstart and spec updates
  - Status: DONE (comprehensive strategy routing examples added to quickstart; strategy inspection endpoint documented)
 
 T040. [Optional] Strategy inspection endpoint [P]
-- Add `/v1/strategies` listing loaded strategies and per-service strategy configuration (read-only).
+- Add `/api/v1/strategies` listing loaded strategies and per-service strategy configuration (read-only).
 - Dependencies: T017
  - Status: DONE (endpoint implemented; returns loaded strategies info and per-service configuration)
 
@@ -252,7 +252,7 @@ T040. [Optional] Strategy inspection endpoint [P]
 
 T041. [Contract Tests] Semaphore API contract [P]
 - Create contract tests for Hestia <-> Semaphore API: service start/stop requests, error handling, status polling
-- Endpoints: `/v1/semaphore/start`, `/v1/semaphore/stop`, `/v1/semaphore/status`
+- Endpoints: `/api/v1/semaphore/start`, `/api/v1/semaphore/stop`, `/api/v1/semaphore/status`
 - Dependencies: T003
  - Status: DONE (comprehensive contract tests created with 12 test cases covering all endpoints, validation, and error handling)
 

@@ -244,8 +244,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         if len(path_parts) >= 2 and path_parts[0] == "services":
             return path_parts[1]
 
-        # Check for /v1/requests with serviceId in body (for dispatcher)
-        if path_parts == ["v1", "requests"]:
+        # Check for /api/v1/requests with serviceId in body (for dispatcher)
+        if path_parts == ["api", "v1", "requests"]:
             return "dispatcher"  # Special case for dispatcher endpoint
 
         return None

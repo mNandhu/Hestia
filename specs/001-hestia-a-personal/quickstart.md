@@ -83,13 +83,13 @@ For detailed setup, see [Semaphore Integration Guide](../docs/semaphore-integrat
 ### Service Management
 ```bash
 # Check service status
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 
 # Start a service proactively 
-curl -X POST http://localhost:8080/v1/services/ollama/start
+curl -X POST http://localhost:8080/api/v1/services/ollama/start
 
 # Get service-specific metrics
-curl http://localhost:8080/v1/services/ollama/metrics
+curl http://localhost:8080/api/v1/services/ollama/metrics
 ```
 
 ### Transparent Proxy (Recommended)
@@ -110,7 +110,7 @@ curl -X POST http://localhost:8080/services/ollama/api/generate \
 ### Gateway Dispatcher
 ```bash
 # Generic request dispatcher
-curl -X POST http://localhost:8080/v1/requests \
+curl -X POST http://localhost:8080/api/v1/requests \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "ollama",
@@ -122,13 +122,13 @@ curl -X POST http://localhost:8080/v1/requests \
 ### Monitoring & Observability
 ```bash
 # Global metrics (counters, timers, gauges)
-curl http://localhost:8080/v1/metrics
+curl http://localhost:8080/api/v1/metrics
 
 # Service-specific metrics
-curl http://localhost:8080/v1/services/ollama/metrics
+curl http://localhost:8080/api/v1/services/ollama/metrics
 
 # Health check (returns service status)
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 ```
 
 ## Client Configuration
@@ -267,11 +267,11 @@ When authentication is enabled:
 ```bash
 # API Key authentication
 curl -H "X-API-Key: your-api-key" \
-  http://localhost:8080/v1/services/ollama/status
+  http://localhost:8080/api/v1/services/ollama/status
 
 # Or Bearer token
 curl -H "Authorization: Bearer your-api-key" \
-  http://localhost:8080/v1/services/ollama/status
+  http://localhost:8080/api/v1/services/ollama/status
 ```
 
 Dashboard uses username/password when enabled (see configuration).
@@ -280,7 +280,7 @@ Dashboard uses username/password when enabled (see configuration).
 
 ### Service Status
 ```bash
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 ```
 ```json
 {
@@ -294,12 +294,12 @@ curl http://localhost:8080/v1/services/ollama/status
 
 ### Metrics
 ```bash
-curl http://localhost:8080/v1/metrics
+curl http://localhost:8080/api/v1/metrics
 ```
 ```json
 {
   "counters": {
-    "requests_total[method=GET,path=/v1/services/{serviceId}/status]": {
+    "requests_total[method=GET,path=/api/v1/services/{serviceId}/status]": {
       "count": 5,
       "timestamp": "2025-09-09T05:30:00Z"
     }
@@ -347,7 +347,7 @@ docker compose logs -f hestia
 ### Cold Service Startup
 ```bash
 # 1. Service is cold initially
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 # {"state": "cold", "readiness": "not_ready", ...}
 
 # 2. Make request → service starts automatically  
@@ -355,14 +355,14 @@ curl http://localhost:8080/services/ollama/api/tags
 # Request queued while service starts, then proxied
 
 # 3. Service is now hot
-curl http://localhost:8080/v1/services/ollama/status  
+curl http://localhost:8080/api/v1/services/ollama/status  
 # {"state": "hot", "readiness": "ready", ...}
 ```
 
 ### Proactive Warmup
 ```bash
 # Start service before it's needed
-curl -X POST http://localhost:8080/v1/services/ollama/start
+curl -X POST http://localhost:8080/api/v1/services/ollama/start
 
 # Subsequent requests are fast (no startup delay)
 curl http://localhost:8080/services/ollama/api/tags
@@ -373,14 +373,14 @@ curl http://localhost:8080/services/ollama/api/tags
 ### Common Issues
 ```bash
 # Service not responding
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 # Check: state, readiness, queuePending
 
 # View service logs  
 docker compose logs -f hestia
 
 # Check metrics for errors
-curl http://localhost:8080/v1/metrics | jq '.counters | to_entries | map(select(.key | contains("error")))'
+curl http://localhost:8080/api/v1/metrics | jq '.counters | to_entries | map(select(.key | contains("error")))'
 ```
 
 ### Log Analysis
@@ -461,7 +461,7 @@ services:
 ### Strategy Inspection
 View loaded strategies and configurations:
 ```bash
-curl http://localhost:8080/v1/strategies | jq .
+curl http://localhost:8080/api/v1/strategies | jq .
 ```
 
 Returns:

@@ -18,8 +18,8 @@ def test_quickstart_examples():
     print("\n📋 Service Management:")
 
     # Check service status
-    response = client.get("/v1/services/ollama/status")
-    print(f"✅ GET /v1/services/ollama/status: {response.status_code}")
+    response = client.get("/api/v1/services/ollama/status")
+    print(f"✅ GET /api/v1/services/ollama/status: {response.status_code}")
     assert response.status_code == 200
     status_data = response.json()
     assert "serviceId" in status_data
@@ -27,13 +27,13 @@ def test_quickstart_examples():
     assert "readiness" in status_data
 
     # Start service proactively
-    response = client.post("/v1/services/ollama/start")
-    print(f"✅ POST /v1/services/ollama/start: {response.status_code}")
+    response = client.post("/api/v1/services/ollama/start")
+    print(f"✅ POST /api/v1/services/ollama/start: {response.status_code}")
     assert response.status_code in [202, 409]  # 409 if already started
 
     # Get service metrics
-    response = client.get("/v1/services/ollama/metrics")
-    print(f"✅ GET /v1/services/ollama/metrics: {response.status_code}")
+    response = client.get("/api/v1/services/ollama/metrics")
+    print(f"✅ GET /api/v1/services/ollama/metrics: {response.status_code}")
     assert response.status_code == 200
 
     # Transparent Proxy Examples
@@ -55,17 +55,17 @@ def test_quickstart_examples():
     print("\n🌐 Gateway Dispatcher:")
 
     response = client.post(
-        "/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/api/tags"}
+        "/api/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/api/tags"}
     )
-    print(f"✅ POST /v1/requests: {response.status_code}")
+    print(f"✅ POST /api/v1/requests: {response.status_code}")
     # Should work regardless of service availability
 
     # Monitoring Examples
     print("\n📊 Monitoring & Observability:")
 
     # Global metrics
-    response = client.get("/v1/metrics")
-    print(f"✅ GET /v1/metrics: {response.status_code}")
+    response = client.get("/api/v1/metrics")
+    print(f"✅ GET /api/v1/metrics: {response.status_code}")
     assert response.status_code == 200
     metrics_data = response.json()
     assert "counters" in metrics_data
@@ -73,21 +73,21 @@ def test_quickstart_examples():
     assert "services" in metrics_data
 
     # Service metrics
-    response = client.get("/v1/services/ollama/metrics")
-    print(f"✅ GET /v1/services/ollama/metrics: {response.status_code}")
+    response = client.get("/api/v1/services/ollama/metrics")
+    print(f"✅ GET /api/v1/services/ollama/metrics: {response.status_code}")
     assert response.status_code == 200
 
     # Authentication Examples (header processing)
     print("\n🔐 Authentication:")
 
     # Test API key header processing (auth not enforced in test)
-    response = client.get("/v1/services/ollama/status", headers={"X-API-Key": "test-api-key"})
+    response = client.get("/api/v1/services/ollama/status", headers={"X-API-Key": "test-api-key"})
     print(f"✅ GET with X-API-Key header: {response.status_code}")
     assert response.status_code == 200
 
     # Test Bearer token header processing
     response = client.get(
-        "/v1/services/ollama/status", headers={"Authorization": "Bearer test-token"}
+        "/api/v1/services/ollama/status", headers={"Authorization": "Bearer test-token"}
     )
     print(f"✅ GET with Bearer token: {response.status_code}")
     assert response.status_code == 200
@@ -102,7 +102,7 @@ def test_response_format_examples():
     print("\n🧪 Testing Response Format Examples...")
 
     # Service Status Response Format
-    response = client.get("/v1/services/ollama/status")
+    response = client.get("/api/v1/services/ollama/status")
     assert response.status_code == 200
     data = response.json()
 
@@ -114,7 +114,7 @@ def test_response_format_examples():
     print("✅ Service status response format matches documentation")
 
     # Metrics Response Format
-    response = client.get("/v1/metrics")
+    response = client.get("/api/v1/metrics")
     assert response.status_code == 200
     data = response.json()
 

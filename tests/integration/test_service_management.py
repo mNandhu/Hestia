@@ -9,7 +9,7 @@ def test_service_status_cold_service():
     client = TestClient(app)
 
     # Act: Check status of a service that hasn't been used (unique name)
-    resp = client.get("/v1/services/cold-test-service/status")
+    resp = client.get("/api/v1/services/cold-test-service/status")
 
     # Assert: Service should be cold and not ready
     assert resp.status_code == 200
@@ -31,13 +31,13 @@ def test_service_status_after_activity(monkeypatch):
     # Simulate service activity by calling the transparent proxy
     # This will put the service in hot/ready state
     with respx.mock() as mock:
-        mock.get("http://upstream.local/v1/models").respond(200, json={"models": []})
+        mock.get("http://upstream.local/api/v1/models").respond(200, json={"models": []})
 
         # This should trigger service startup
-        client.get("/services/ollama/v1/models")
+        client.get("/services/ollama/api/v1/models")
 
     # Act: Check status after activity
-    resp = client.get("/v1/services/ollama/status")
+    resp = client.get("/api/v1/services/ollama/status")
 
     # Assert: Service should be hot and ready
     assert resp.status_code == 200
@@ -53,7 +53,7 @@ def test_start_service_cold_service():
     client = TestClient(app)
 
     # Act: Start a cold service
-    resp = client.post("/v1/services/new-service/start")
+    resp = client.post("/api/v1/services/new-service/start")
 
     # Assert: Should return 202 Accepted
     assert resp.status_code == 202
@@ -69,13 +69,13 @@ def test_start_service_already_running(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://upstream.local")
 
     with respx.mock() as mock:
-        mock.get("http://upstream.local/v1/models").respond(200, json={"models": []})
+        mock.get("http://upstream.local/api/v1/models").respond(200, json={"models": []})
 
         # Make the service hot by using it
-        client.get("/services/ollama/v1/models")
+        client.get("/services/ollama/api/v1/models")
 
     # Act: Try to start the already running service
-    resp = client.post("/v1/services/ollama/start")
+    resp = client.post("/api/v1/services/ollama/start")
 
     # Assert: Should return 409 Conflict
     assert resp.status_code == 409
@@ -88,8 +88,8 @@ def test_start_service_already_starting():
     client = TestClient(app)
 
     # Act: Start a service twice quickly
-    resp1 = client.post("/v1/services/starting-service/start")
-    resp2 = client.post("/v1/services/starting-service/start")
+    resp1 = client.post("/api/v1/services/starting-service/start")
+    resp2 = client.post("/api/v1/services/starting-service/start")
 
     # Assert: First should succeed, second should conflict
     assert resp1.status_code == 202
@@ -115,8 +115,8 @@ def test_service_status_shows_queue_pending(monkeypatch):
     def make_request():
         try:
             client.post(
-                "/v1/requests",
-                json={"serviceId": "ollama", "method": "GET", "path": "/v1/models"},
+                "/api/v1/requests",
+                json={"serviceId": "ollama", "method": "GET", "path": "/api/v1/models"},
             )  # Remove timeout parameter to avoid deprecation warning
         except Exception:
             pass  # Expected to timeout/fail
@@ -131,7 +131,7 @@ def test_service_status_shows_queue_pending(monkeypatch):
     time.sleep(0.1)
 
     # Check status while request is queued
-    resp = client.get("/v1/services/ollama/status")
+    resp = client.get("/api/v1/services/ollama/status")
 
     # Clean up
     thread.join(timeout=2)
@@ -149,8 +149,8 @@ def test_service_status_starting_state():
     client = TestClient(app)
 
     # Act: Start a service and immediately check status
-    start_resp = client.post("/v1/services/startup-test/start")
-    status_resp = client.get("/v1/services/startup-test/status")
+    start_resp = client.post("/api/v1/services/startup-test/start")
+    status_resp = client.get("/api/v1/services/startup-test/status")
 
     # Assert: Should show starting state or hot (if startup was very fast)
     assert start_resp.status_code == 202
@@ -170,12 +170,12 @@ def test_service_endpoints_with_different_service_ids():
 
     for service_id in service_ids:
         # Test status endpoint
-        status_resp = client.get(f"/v1/services/{service_id}/status")
+        status_resp = client.get(f"/api/v1/services/{service_id}/status")
         assert status_resp.status_code == 200
         assert status_resp.json()["serviceId"] == service_id
 
         # Test start endpoint
-        start_resp = client.post(f"/v1/services/{service_id}/start")
+        start_resp = client.post(f"/api/v1/services/{service_id}/start")
         assert start_resp.status_code in [202, 409]  # 202 for new, 409 if already starting
 
 
@@ -184,7 +184,7 @@ def test_service_status_json_structure():
     client = TestClient(app)
 
     # Act: Get service status
-    resp = client.get("/v1/services/json-test/status")
+    resp = client.get("/api/v1/services/json-test/status")
 
     # Assert: Proper JSON structure
     assert resp.status_code == 200
@@ -221,7 +221,7 @@ def test_status_reports_hot_if_upstream_running_without_proxy(monkeypatch):
         mock.get("http://upstream.local/api/tags").respond(200, json={"ok": True})
 
         # Act: Call status endpoint BEFORE any proxy request
-        resp = client.get(f"/v1/services/{service_id}/status")
+        resp = client.get(f"/api/v1/services/{service_id}/status")
 
     # Assert: Expect hot/ready immediately
     assert resp.status_code == 200

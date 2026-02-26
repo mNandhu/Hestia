@@ -1,12 +1,14 @@
 import asyncio
 import json
+import os
 import time
 from typing import Optional, Any
 from urllib.parse import urljoin
 
 import httpx
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from hestia.config import load_config
 from hestia.logging import EventType, LogLevel, configure_logging, get_logger
@@ -48,6 +50,11 @@ _strategy_instances: dict[str, Any] = {}
 
 # Log gateway startup
 logger.log_event(EventType.GATEWAY_START, "Hestia Gateway starting up")
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+ui_dir = os.path.join(current_dir, "ui")
+
+app.mount("/assets", StaticFiles(directory=os.path.join(ui_dir, "assets")), name="assets")
 
 
 @app.on_event("startup")
@@ -172,7 +179,7 @@ def _resolve_upstream_base(
     return service_config.base_url, "base_url"
 
 
-@app.post("/v1/requests")
+@app.post("/api/v1/requests")
 async def dispatch_request(gateway_request: GatewayRequest) -> GatewayResponse:
     """
     Generic dispatcher for routing HTTP requests through the gateway.
@@ -450,7 +457,7 @@ async def _perform_gateway_request(
     raise Exception("All request attempts failed")
 
 
-@app.get("/v1/services/{serviceId}/status")
+@app.get("/api/v1/services/{serviceId}/status")
 def get_service_status(serviceId: str) -> ServiceStatus:
     """Get current status of a service including state, readiness, and queue information."""
     _ensure_idle_monitor_started()
@@ -507,7 +514,7 @@ def get_service_status(serviceId: str) -> ServiceStatus:
     )
 
 
-@app.get("/v1/strategies")
+@app.get("/api/v1/strategies")
 def get_strategies_endpoint():
     """Get information about loaded strategies and per-service configuration."""
     config = _get_config()
@@ -552,19 +559,19 @@ def get_strategies_endpoint():
     }
 
 
-@app.get("/v1/metrics")
+@app.get("/api/v1/metrics")
 def get_metrics_endpoint():
     """Get all collected metrics."""
     return metrics.get_all_metrics()
 
 
-@app.get("/v1/services/{serviceId}/metrics")
+@app.get("/api/v1/services/{serviceId}/metrics")
 def get_service_metrics_endpoint(serviceId: str):
     """Get metrics for a specific service."""
     return metrics.get_service_metrics(serviceId)
 
 
-@app.post("/v1/services/{serviceId}/start")
+@app.post("/api/v1/services/{serviceId}/start")
 async def start_service_proactively(serviceId: str) -> Response:
     """Proactively start a service if it's not already running."""
     _ensure_idle_monitor_started()
@@ -1242,6 +1249,24 @@ def _ensure_idle_monitor_started() -> None:
     t = threading.Thread(target=_idle_monitor_loop, name="hestia-idle-monitor", daemon=True)
     t.start()
     _IDLE_THREAD_STARTED = True
+
+
+@app.get("/{full_path:path}")
+def serve_react_app(full_path: str):
+    # Security check to prevent directory traversal
+    if ".." in full_path:
+        return FileResponse(os.path.join(ui_dir, "index.html"))
+
+    # Check if the requested path is a real file (e.g., /vite.svg)
+    requested_file = os.path.join(ui_dir, full_path)
+
+    # If it's a real file, serve the file directly
+    if os.path.isfile(requested_file):
+        return FileResponse(requested_file)
+
+    # If it is NOT a file (e.g., /dashboard, /settings, or just /),
+    # serve index.html and let React Router take over
+    return FileResponse(os.path.join(ui_dir, "index.html"))
 
 
 def run() -> None:

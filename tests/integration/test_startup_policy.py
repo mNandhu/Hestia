@@ -14,14 +14,14 @@ def test_startup_policy_retry_fallback_then_error(monkeypatch):
     monkeypatch.setenv("OLLAMA_FALLBACK_URL", "http://fallback.local")
 
     with respx.mock(assert_all_called=False) as mock:
-        primary_route = mock.get("http://primary.local/v1/models").mock(
+        primary_route = mock.get("http://primary.local/api/v1/models").mock(
             side_effect=Exception("connect error")
         )
-        fallback_route = mock.get("http://fallback.local/v1/models").mock(
+        fallback_route = mock.get("http://fallback.local/api/v1/models").mock(
             side_effect=Exception("connect error")
         )
 
-        resp = client.get("/services/ollama/v1/models")
+        resp = client.get("/services/ollama/api/v1/models")
 
     # Expect 503 after 2 retries on primary and 1 attempt on fallback
     assert resp.status_code == 503
@@ -40,14 +40,14 @@ def test_startup_policy_with_event_logging(monkeypatch, caplog):
     monkeypatch.setenv("OLLAMA_FALLBACK_URL", "http://fallback-log.local")
 
     with respx.mock(assert_all_called=False) as mock:
-        primary_route = mock.get("http://primary-log.local/v1/models").mock(
+        primary_route = mock.get("http://primary-log.local/api/v1/models").mock(
             side_effect=Exception("connect error")
         )
-        fallback_route = mock.get("http://fallback-log.local/v1/models").mock(
+        fallback_route = mock.get("http://fallback-log.local/api/v1/models").mock(
             side_effect=Exception("connect error")
         )
 
-        resp = client.get("/services/ollama/v1/models")
+        resp = client.get("/services/ollama/api/v1/models")
 
     # Expect 503 after retries and fallback
     assert resp.status_code == 503

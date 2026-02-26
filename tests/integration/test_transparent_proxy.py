@@ -12,10 +12,10 @@ def test_transparent_proxy_get_with_service_prefix(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", upstream_base)
 
     with respx.mock(assert_all_called=True) as mock:
-        mock.get(f"{upstream_base}/v1/models").respond(200, json={"models": ["llama3"]})
+        mock.get(f"{upstream_base}/api/v1/models").respond(200, json={"models": ["llama3"]})
 
         # Act: call through Hestia transparent proxy
-        resp = client.get("/services/ollama/v1/models")
+        resp = client.get("/services/ollama/api/v1/models")
 
     # Assert: Hestia returned the proxied response
     assert resp.status_code == 200
@@ -109,12 +109,12 @@ def test_transparent_proxy_with_query_parameters(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", upstream_base)
 
     with respx.mock(assert_all_called=True) as mock:
-        mock.get(f"{upstream_base}/v1/models?format=json&limit=10").respond(
+        mock.get(f"{upstream_base}/api/v1/models?format=json&limit=10").respond(
             200, json={"models": ["llama3"]}
         )
 
         # Act: call through Hestia transparent proxy with query params
-        resp = client.get("/services/ollama/v1/models?format=json&limit=10")
+        resp = client.get("/services/ollama/api/v1/models?format=json&limit=10")
 
     # Assert: Hestia returned the proxied response
     assert resp.status_code == 200
@@ -129,14 +129,14 @@ def test_transparent_proxy_preserves_headers(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", upstream_base)
 
     with respx.mock(assert_all_called=True) as mock:
-        mock.get(f"{upstream_base}/v1/models").respond(
+        mock.get(f"{upstream_base}/api/v1/models").respond(
             200,
             json={"models": ["llama3"]},
             headers={"x-custom-header": "test-value", "content-type": "application/json"},
         )
 
         # Act: call through Hestia transparent proxy
-        resp = client.get("/services/ollama/v1/models")
+        resp = client.get("/services/ollama/api/v1/models")
 
     # Assert: Hestia returned the proxied response with headers
     assert resp.status_code == 200

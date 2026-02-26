@@ -10,7 +10,7 @@ cd Hestia
 docker compose up -d
 
 # Test the gateway
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 ```
 
 **That's it!** Hestia is now running and ready to manage your services.
@@ -70,10 +70,10 @@ ollama list  # Just works!
 ### 📊 Built-in Observability  
 ```bash
 # Service status
-curl http://localhost:8080/v1/services/ollama/status
+curl http://localhost:8080/api/v1/services/ollama/status
 
 # System metrics  
-curl http://localhost:8080/v1/metrics
+curl http://localhost:8080/api/v1/metrics
 
 # Structured logs with request tracing
 docker compose logs -f hestia
@@ -178,4 +178,4 @@ Contributions welcome! See our [development guide](tests/) and [task list](specs
 
 ---
 
-**Get started in 30 seconds**: `docker compose up -d` → `curl http://localhost:8080/v1/services/ollama/status` ✨
+**Get started in 30 seconds**: `docker compose up -d` → `curl http://localhost:8080/api/v1/services/ollama/status` ✨

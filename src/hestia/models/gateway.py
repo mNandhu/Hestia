@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class GatewayRequest(BaseModel):
-    """Request model for POST /v1/requests dispatcher endpoint."""
+    """Request model for POST /api/v1/requests dispatcher endpoint."""
 
     service_id: str = Field(..., alias="serviceId", description="Target service identifier")
     method: str = Field(..., description="HTTP method (GET, POST, PUT, PATCH, DELETE)")
@@ -19,7 +19,7 @@ class GatewayRequest(BaseModel):
 
 
 class GatewayResponse(BaseModel):
-    """Response model for POST /v1/requests dispatcher endpoint."""
+    """Response model for POST /api/v1/requests dispatcher endpoint."""
 
     status: int = Field(..., description="HTTP status code from target service")
     headers: Optional[Dict[str, str]] = Field(
@@ -29,7 +29,7 @@ class GatewayResponse(BaseModel):
 
 
 class ServiceStatus(BaseModel):
-    """Response model for GET /v1/services/{serviceId}/status endpoint."""
+    """Response model for GET /api/v1/services/{serviceId}/status endpoint."""
 
     service_id: str = Field(..., alias="serviceId", description="Service identifier")
     state: str = Field(..., description="Service state: hot, cold, starting, stopping")

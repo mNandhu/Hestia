@@ -15,11 +15,11 @@ def test_dispatcher_get_request(monkeypatch):
     expected_response = {"models": ["llama3", "mistral"]}
 
     with respx.mock(assert_all_called=True) as mock:
-        mock.get(f"{upstream_base}/v1/models").respond(200, json=expected_response)
+        mock.get(f"{upstream_base}/api/v1/models").respond(200, json=expected_response)
 
         # Act: call through Hestia dispatcher
         resp = client.post(
-            "/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/v1/models"}
+            "/api/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/api/v1/models"}
         )
 
     # Assert: Hestia returned the dispatched response
@@ -45,7 +45,7 @@ def test_dispatcher_post_request_with_json_body(monkeypatch):
 
         # Act: call through Hestia dispatcher
         resp = client.post(
-            "/v1/requests",
+            "/api/v1/requests",
             json={
                 "serviceId": "ollama",
                 "method": "POST",
@@ -78,7 +78,7 @@ def test_dispatcher_with_custom_headers(monkeypatch):
 
         # Act: call through Hestia dispatcher
         resp = client.post(
-            "/v1/requests",
+            "/api/v1/requests",
             json={
                 "serviceId": "ollama",
                 "method": "GET",
@@ -110,7 +110,7 @@ def test_dispatcher_put_request(monkeypatch):
 
         # Act: call through Hestia dispatcher
         resp = client.post(
-            "/v1/requests",
+            "/api/v1/requests",
             json={"serviceId": "ollama", "method": "PUT", "path": "/api/create", "body": payload},
         )
 
@@ -136,7 +136,7 @@ def test_dispatcher_delete_request(monkeypatch):
 
         # Act: call through Hestia dispatcher
         resp = client.post(
-            "/v1/requests", json={"serviceId": "ollama", "method": "DELETE", "path": "/api/delete"}
+            "/api/v1/requests", json={"serviceId": "ollama", "method": "DELETE", "path": "/api/delete"}
         )
 
     # Assert: Hestia returned the dispatched response
@@ -159,7 +159,7 @@ def test_dispatcher_service_unavailable(monkeypatch):
 
     # Act: call through Hestia dispatcher
     resp = client.post(
-        "/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/v1/models"}
+        "/api/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/api/v1/models"}
     )
 
     # Assert: Hestia returns service unavailable in the response body
@@ -187,7 +187,7 @@ def test_dispatcher_response_headers_preserved(monkeypatch):
 
         # Act: call through Hestia dispatcher
         resp = client.post(
-            "/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/api/test"}
+            "/api/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/api/test"}
         )
 
     # Assert: Hestia returned the dispatched response with headers
@@ -216,7 +216,7 @@ def test_dispatcher_handles_text_response(monkeypatch):
 
         # Act: call through Hestia dispatcher
         resp = client.post(
-            "/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/api/text"}
+            "/api/v1/requests", json={"serviceId": "ollama", "method": "GET", "path": "/api/text"}
         )
 
     # Assert: Hestia returned the text response

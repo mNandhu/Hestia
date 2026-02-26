@@ -37,7 +37,7 @@ def test_idle_timeout_triggers_semaphore_shutdown(monkeypatch):
         )
 
         # Mock target service response during active use
-        mock.get("http://shutdown-target.local/v1/models").respond(
+        mock.get("http://shutdown-target.local/api/v1/models").respond(
             200, json={"models": ["shutdown-test-model"]}
         )
 
@@ -47,13 +47,13 @@ def test_idle_timeout_triggers_semaphore_shutdown(monkeypatch):
         )
 
         # First, use the service to get it into hot state
-        resp1 = client.get(f"/services/{service_id}/v1/models")
+        resp1 = client.get(f"/services/{service_id}/api/v1/models")
 
         # Wait beyond idle timeout
         time.sleep(0.1)
 
         # Check service status - should be cold after Semaphore shutdown
-        status_resp = client.get(f"/v1/services/{service_id}/status")
+        status_resp = client.get(f"/api/v1/services/{service_id}/status")
 
     # For now, this will fail because Semaphore integration isn't implemented yet
     # The test expects that:
@@ -101,7 +101,7 @@ def test_service_state_during_semaphore_shutdown(monkeypatch):
         )
 
         # Mock target service
-        mock.get("http://state-target.local/v1/models").respond(
+        mock.get("http://state-target.local/api/v1/models").respond(
             200, json={"models": ["state-model"]}
         )
 
@@ -116,16 +116,16 @@ def test_service_state_during_semaphore_shutdown(monkeypatch):
         )
 
         # Step 1: Start the service
-        resp1 = client.get(f"/services/{service_id}/v1/models")
+        resp1 = client.get(f"/services/{service_id}/api/v1/models")
 
         # Step 2: Check status (should be hot/ready)
-        status1 = client.get(f"/v1/services/{service_id}/status")
+        status1 = client.get(f"/api/v1/services/{service_id}/status")
 
         # Step 3: Wait for idle timeout to trigger shutdown
         time.sleep(0.1)
 
         # Step 4: Check status again (should be cold after shutdown)
-        status2 = client.get(f"/v1/services/{service_id}/status")
+        status2 = client.get(f"/api/v1/services/{service_id}/status")
 
     # The test expects that:
     # 1. Service transitions from cold -> starting -> hot
@@ -168,7 +168,7 @@ def test_new_requests_during_semaphore_shutdown(monkeypatch):
         )
 
         # Mock target service responses
-        mock.get("http://shutdown-req-target.local/v1/models").respond(
+        mock.get("http://shutdown-req-target.local/api/v1/models").respond(
             200, json={"models": ["shutdown-req-model"]}
         )
 
@@ -178,7 +178,7 @@ def test_new_requests_during_semaphore_shutdown(monkeypatch):
         )
 
         # Start service
-        resp1 = client.get(f"/services/{service_id}/v1/models")
+        resp1 = client.get(f"/services/{service_id}/api/v1/models")
 
         # Wait for idle timeout to begin shutdown process
         time.sleep(0.06)
@@ -187,7 +187,7 @@ def test_new_requests_during_semaphore_shutdown(monkeypatch):
         # This should either:
         # 1. Cancel the shutdown and restart the service, or
         # 2. Queue the request until a new startup completes
-        resp2 = client.get(f"/services/{service_id}/v1/models")
+        resp2 = client.get(f"/services/{service_id}/api/v1/models")
 
     # The test expects that:
     # 1. Initial request starts service normally
@@ -230,7 +230,7 @@ def test_semaphore_shutdown_failure_handling(monkeypatch):
         )
 
         # Mock target service
-        mock.get("http://shutdown-fail-target.local/v1/models").respond(
+        mock.get("http://shutdown-fail-target.local/api/v1/models").respond(
             200, json={"models": ["shutdown-fail-model"]}
         )
 
@@ -240,13 +240,13 @@ def test_semaphore_shutdown_failure_handling(monkeypatch):
         )
 
         # Start service
-        resp1 = client.get(f"/services/{service_id}/v1/models")
+        resp1 = client.get(f"/services/{service_id}/api/v1/models")
 
         # Wait for idle timeout and shutdown attempt
         time.sleep(0.1)
 
         # Check service status after failed shutdown
-        status_resp = client.get(f"/v1/services/{service_id}/status")
+        status_resp = client.get(f"/api/v1/services/{service_id}/status")
 
     # The test expects that:
     # 1. Service starts normally
@@ -290,7 +290,7 @@ def test_semaphore_shutdown_with_dispatcher(monkeypatch):
         )
 
         # Mock target service
-        mock.get("http://disp-shutdown-target.local/v1/models").respond(
+        mock.get("http://disp-shutdown-target.local/api/v1/models").respond(
             200, json={"models": ["disp-shutdown-model"]}
         )
 
@@ -301,14 +301,14 @@ def test_semaphore_shutdown_with_dispatcher(monkeypatch):
 
         # Start service via dispatcher
         resp1 = client.post(
-            "/v1/requests", json={"serviceId": service_id, "method": "GET", "path": "/v1/models"}
+            "/api/v1/requests", json={"serviceId": service_id, "method": "GET", "path": "/api/v1/models"}
         )
 
         # Wait for idle timeout
         time.sleep(0.1)
 
         # Check status (should be cold after shutdown)
-        status_resp = client.get(f"/v1/services/{service_id}/status")
+        status_resp = client.get(f"/api/v1/services/{service_id}/status")
 
     # The test expects that:
     # 1. Dispatcher starts service via Semaphore

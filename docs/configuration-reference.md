@@ -364,7 +364,7 @@ grep "configuration" logs/hestia.log
 
 ```bash
 # Check service status (shows loaded config)
-curl http://localhost:8080/v1/services/myservice/status
+curl http://localhost:8080/api/v1/services/myservice/status
 
 # Verify environment variables
 env | grep MYSERVICE

@@ -280,7 +280,7 @@ class TestLoggingMiddleware:
         """Test that middleware adds request ID to response."""
         client = TestClient(app)
 
-        response = client.get("/v1/services/test/status")
+        response = client.get("/api/v1/services/test/status")
         assert "X-Request-ID" in response.headers
         request_id = response.headers["X-Request-ID"]
         assert request_id.startswith("req_")
@@ -290,7 +290,7 @@ class TestLoggingMiddleware:
         client = TestClient(app)
         custom_id = "custom-req-123"
 
-        response = client.get("/v1/services/test/status", headers={"X-Request-ID": custom_id})
+        response = client.get("/api/v1/services/test/status", headers={"X-Request-ID": custom_id})
         assert response.headers["X-Request-ID"] == custom_id
 
     def test_service_id_extraction(self):
@@ -298,7 +298,7 @@ class TestLoggingMiddleware:
         client = TestClient(app)
 
         # Service endpoint should extract service ID
-        response = client.get("/v1/services/ollama/status")
+        response = client.get("/api/v1/services/ollama/status")
         assert response.status_code == 200
 
 
@@ -309,7 +309,7 @@ class TestMetricsEndpoints:
         """Test global metrics endpoint."""
         client = TestClient(app)
 
-        response = client.get("/v1/metrics")
+        response = client.get("/api/v1/metrics")
         assert response.status_code == 200
 
         metrics_data = response.json()
@@ -323,7 +323,7 @@ class TestMetricsEndpoints:
         """Test service-specific metrics endpoint."""
         client = TestClient(app)
 
-        response = client.get("/v1/services/ollama/metrics")
+        response = client.get("/api/v1/services/ollama/metrics")
         assert response.status_code == 200
 
         metrics_data = response.json()
@@ -340,12 +340,12 @@ class TestIntegration:
         client = TestClient(app)
 
         # Start a service
-        response = client.post("/v1/services/ollama/start")
+        response = client.post("/api/v1/services/ollama/start")
         # Should either succeed (202) or conflict (409) if already started
         assert response.status_code in [202, 409]
 
         # Check that metrics were recorded
-        metrics_response = client.get("/v1/services/ollama/metrics")
+        metrics_response = client.get("/api/v1/services/ollama/metrics")
         assert metrics_response.status_code == 200
 
     def test_request_generates_metrics(self):
@@ -353,10 +353,10 @@ class TestIntegration:
         client = TestClient(app)
 
         # Make a request
-        client.get("/v1/services/test/status")
+        client.get("/api/v1/services/test/status")
 
         # Get updated metrics
-        updated_response = client.get("/v1/metrics")
+        updated_response = client.get("/api/v1/metrics")
         updated_metrics = updated_response.json()
 
         # Should have metrics (exact counts depend on other tests running)
@@ -367,7 +367,7 @@ class TestIntegration:
         client = TestClient(app)
 
         # Make request to non-existent endpoint
-        response = client.get("/v1/nonexistent")
+        response = client.get("/api/v1/nonexistent")
         assert response.status_code == 404
 
         # Middleware should still add request ID

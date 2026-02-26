@@ -695,7 +695,7 @@ if __name__ == "__main__":
     logger.log_service_state_change("ollama", "cold", "hot")
 
     # Request events with timer
-    with RequestTimer(logger, "GET", "/v1/models", "ollama") as timer:
+    with RequestTimer(logger, "GET", "/api/v1/models", "ollama") as timer:
         time.sleep(0.01)  # Simulate work
         timer.set_status_code(200)
 

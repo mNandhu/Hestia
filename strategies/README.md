@@ -247,7 +247,7 @@ services:
 ### 1. Debugging Strategies
 - Use Hestia's logging system for debug output
 - Test strategies independently before integration
-- Use the `/v1/strategies` API endpoint to inspect loaded strategies
+- Use the `/api/v1/strategies` API endpoint to inspect loaded strategies
 - Enable verbose logging during development
 
 ### 2. Strategy Dependencies

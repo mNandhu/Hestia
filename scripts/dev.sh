@@ -182,7 +182,7 @@ api_test() {
     fi
     
     echo "Testing service status endpoint..."
-    curl -s http://localhost:8080/v1/services/ollama/status | head -c 200
+    curl -s http://localhost:8080/api/v1/services/ollama/status | head -c 200
     echo ""
 }
 

@@ -35,12 +35,12 @@ def test_cold_service_triggers_semaphore_start_request(monkeypatch):
         )
 
         # Mock the eventual target service response (after Semaphore starts it)
-        mock.get("http://target-service.local/v1/models").respond(
+        mock.get("http://target-service.local/api/v1/models").respond(
             200, json={"models": ["test-model"]}
         )
 
         # Act: Request to cold service via transparent proxy
-        resp = client.get(f"/services/{service_id}/v1/models")
+        resp = client.get(f"/services/{service_id}/api/v1/models")
 
     # T043 implementation complete! The test verifies that:
     # 1. Hestia detects the service is cold
@@ -85,14 +85,14 @@ def test_requests_queued_during_semaphore_startup(monkeypatch):
         )
 
         # Mock target service responses for queued requests
-        mock.get("http://queue-target.local/v1/models").respond(200, json={"models": ["model-1"]})
+        mock.get("http://queue-target.local/api/v1/models").respond(200, json={"models": ["model-1"]})
         mock.post("http://queue-target.local/api/generate").respond(
             200, json={"response": "Generated text"}
         )
 
         # Act: Send multiple requests while service is starting
         # These should be queued until Semaphore reports service as ready
-        resp1 = client.get(f"/services/{service_id}/v1/models")
+        resp1 = client.get(f"/services/{service_id}/api/v1/models")
         resp2 = client.post(
             f"/services/{service_id}/api/generate", json={"model": "test", "prompt": "hello"}
         )
@@ -136,7 +136,7 @@ def test_semaphore_start_failure_returns_error(monkeypatch):
         )
 
         # Act: Request to service when Semaphore fails to start it
-        resp = client.get(f"/services/{service_id}/v1/models")
+        resp = client.get(f"/services/{service_id}/api/v1/models")
 
     # The test expects that:
     # 1. Hestia tries to start service via Semaphore
@@ -148,7 +148,7 @@ def test_semaphore_start_failure_returns_error(monkeypatch):
 
 
 def test_dispatcher_with_semaphore_integration(monkeypatch):
-    """Test that the /v1/requests dispatcher also works with Semaphore integration."""
+    """Test that the /api/v1/requests dispatcher also works with Semaphore integration."""
     client = TestClient(app)
 
     # Clear any existing service state from previous tests
@@ -175,13 +175,13 @@ def test_dispatcher_with_semaphore_integration(monkeypatch):
         )
 
         # Mock target service response
-        mock.get("http://dispatcher-target.local/v1/models").respond(
+        mock.get("http://dispatcher-target.local/api/v1/models").respond(
             200, json={"models": ["dispatcher-model"]}
         )
 
         # Act: Use dispatcher endpoint with Semaphore-managed service
         resp = client.post(
-            "/v1/requests", json={"serviceId": service_id, "method": "GET", "path": "/v1/models"}
+            "/api/v1/requests", json={"serviceId": service_id, "method": "GET", "path": "/api/v1/models"}
         )
 
     # The test expects that:
@@ -235,12 +235,12 @@ def test_semaphore_status_polling_until_ready(monkeypatch):
         )
 
         # Mock target service response once ready
-        mock.get("http://polling-target.local/v1/models").respond(
+        mock.get("http://polling-target.local/api/v1/models").respond(
             200, json={"models": ["polling-model"]}
         )
 
         # Act: Request service that requires polling until ready
-        resp = client.get(f"/services/{service_id}/v1/models")
+        resp = client.get(f"/services/{service_id}/api/v1/models")
 
     # The test expects that:
     # 1. Hestia starts service via Semaphore

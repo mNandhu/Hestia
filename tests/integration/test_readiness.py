@@ -14,21 +14,21 @@ def test_readiness_with_health_endpoint(monkeypatch):
     monkeypatch.setenv("OLLAMA_WARMUP_MS", "0")
 
     # Before start, status should be not_ready or 501 (until implemented)
-    pre = client.get("/v1/services/ollama/status")
+    pre = client.get("/api/v1/services/ollama/status")
     assert pre.status_code in {200, 501}
 
     with respx.mock(assert_all_called=True) as mock:
         mock.get("http://upstream.local/health").respond(200, json={"ok": True})
 
         # Start the service; expect 202 Accepted
-        start = client.post("/v1/services/ollama/start")
+        start = client.post("/api/v1/services/ollama/start")
         assert start.status_code in {202, 501}
 
         # Poll status until ready (or fail due to unimplemented)
         ready = False
         st = None
         for _ in range(10):
-            st = client.get("/v1/services/ollama/status")
+            st = client.get("/api/v1/services/ollama/status")
             if st.status_code == 200 and st.json().get("readiness") == "ready":
                 ready = True
                 break
