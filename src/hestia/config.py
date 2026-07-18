@@ -1,5 +1,6 @@
 import os
 from typing import Dict, Optional, Any, List
+from tempfile import NamedTemporaryFile
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -212,3 +213,29 @@ def _load_services_from_environment(services_config: Dict[str, Any]):
                 print(
                     f"Warning: Invalid {field_type.__name__} value for {service_id}.{config_field}: {env_value} ({e})"
                 )
+
+
+def config_to_dict(config: HestiaConfig) -> Dict[str, Any]:
+    """Convert a validated configuration model into a plain serializable dictionary."""
+    return config.model_dump()
+
+
+def save_config(config: HestiaConfig, config_path: str = "hestia_config.yml") -> None:
+    """Persist configuration to YAML atomically.
+
+    Writes through a temporary file and then atomically replaces the target to
+    avoid partially-written configuration files.
+    """
+    config_data = config_to_dict(config)
+    target_dir = os.path.dirname(os.path.abspath(config_path)) or "."
+
+    with NamedTemporaryFile("w", delete=False, dir=target_dir, suffix=".tmp") as tmp_file:
+        yaml.safe_dump(config_data, tmp_file, default_flow_style=False, sort_keys=False)
+        temp_path = tmp_file.name
+
+    os.replace(temp_path, config_path)
+
+
+def validate_config_payload(payload: Dict[str, Any]) -> HestiaConfig:
+    """Validate an incoming configuration payload and return a typed model."""
+    return HestiaConfig(**payload)

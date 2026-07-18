@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from hestia.config import load_config
+from hestia.config import load_config, config_to_dict, save_config, validate_config_payload
 from hestia.logging import EventType, LogLevel, configure_logging, get_logger
 from hestia.metrics import get_metrics
 from hestia.middleware import add_logging_middleware
@@ -653,9 +653,127 @@ async def start_service_proactively(serviceId: str) -> Response:
         )
 
 
+@app.post("/api/v1/services/{serviceId}/stop")
+async def stop_service(serviceId: str) -> Response:
+    """Stop a service proactively."""
+    _ensure_idle_monitor_started()
+
+    service_config = _get_config().services.get(serviceId, _get_config().services["ollama"])
+    stop_result = _stop_service_now(serviceId, service_config, reason="manual_stop")
+
+    if stop_result["already_stopped"]:
+        return Response(
+            status_code=409,
+            content='{"message": "Service is already stopped"}',
+            media_type="application/json",
+        )
+
+    return Response(
+        status_code=202,
+        content=json.dumps(
+            {
+                "message": "Service stop initiated",
+                "cancelledRequests": stop_result["cancelled_requests"],
+            }
+        ),
+        media_type="application/json",
+    )
+
+
+@app.post("/api/v1/services/{serviceId}/restart")
+async def restart_service(serviceId: str) -> Response:
+    """Restart a service by stopping it first and then initiating startup."""
+    _ensure_idle_monitor_started()
+
+    if _request_queue.is_service_starting(serviceId):
+        return Response(
+            status_code=409,
+            content='{"message": "Service is already starting"}',
+            media_type="application/json",
+        )
+
+    service_config = _get_config().services.get(serviceId, _get_config().services["ollama"])
+    stop_result = _stop_service_now(serviceId, service_config, reason="manual_restart")
+
+    if not _request_queue.mark_service_starting(serviceId):
+        return Response(
+            status_code=409,
+            content='{"message": "Service is already starting"}',
+            media_type="application/json",
+        )
+
+    start_time = time.time()
+    logger.log_service_start(serviceId, metadata={"reason": "manual_restart"})
+    metrics.increment_counter("service_starts_total", service_id=serviceId)
+
+    asyncio.create_task(_start_service_async(serviceId, service_config, start_time))
+
+    return Response(
+        status_code=202,
+        content=json.dumps(
+            {
+                "message": "Service restart initiated",
+                "cancelledRequests": stop_result["cancelled_requests"],
+            }
+        ),
+        media_type="application/json",
+    )
+
+
+@app.get("/api/v1/config")
+def get_config_endpoint():
+    """Get effective Hestia configuration for UI management."""
+    config = _get_config()
+    return {
+        "config": config_to_dict(config),
+        "configPath": "hestia_config.yml",
+    }
+
+
+@app.put("/api/v1/config")
+def update_config_endpoint(payload: dict[str, Any]) -> Response:
+    """Validate and persist Hestia configuration."""
+    config_payload = payload.get("config", payload)
+
+    try:
+        validated_config = validate_config_payload(config_payload)
+    except Exception as e:
+        return Response(
+            status_code=422,
+            content=json.dumps({"message": "Invalid configuration", "error": str(e)}),
+            media_type="application/json",
+        )
+
+    try:
+        save_config(validated_config)
+    except Exception as e:
+        return Response(
+            status_code=500,
+            content=json.dumps({"message": "Failed to persist configuration", "error": str(e)}),
+            media_type="application/json",
+        )
+
+    logger.info(
+        "Configuration updated",
+        event_type=EventType.GATEWAY_START,
+        metadata={"source": "api"},
+    )
+
+    return Response(
+        status_code=200,
+        content=json.dumps(
+            {
+                "message": "Configuration updated",
+                "config": config_to_dict(validated_config),
+            }
+        ),
+        media_type="application/json",
+    )
+
+
 # Transparent proxy path supports multiple methods
 @app.api_route(
-    "/services/{serviceId}/{proxyPath:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"]
+    "/api/services/{serviceId}/{proxyPath:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"]
 )
 async def transparent_proxy(request: Request, serviceId: str, proxyPath: str) -> Response:
     """Transparent proxy supporting all HTTP methods with queue integration for cold services."""
@@ -1251,6 +1369,59 @@ def _ensure_idle_monitor_started() -> None:
     _IDLE_THREAD_STARTED = True
 
 
+<<<<<<< Updated upstream
+=======
+def _set_service_cold(service_id: str, reason: str = "manual_stop") -> None:
+    """Force service state to cold/not_ready and emit state-change metrics/logs."""
+    now_ms = int(time.time() * 1000)
+    svc = _services.setdefault(service_id, {})
+    old_state = svc.get("state", "cold")
+
+    svc["state"] = "cold"
+    svc["readiness"] = "not_ready"
+    svc["last_used_ms"] = now_ms
+
+    if old_state != "cold":
+        logger.log_service_state_change(
+            service_id,
+            old_state,
+            "cold",
+            metadata={"reason": reason},
+        )
+        metrics.increment_counter(
+            "service_state_changes_total",
+            service_id=service_id,
+            labels={"from": old_state, "to": "cold", "reason": reason},
+        )
+
+
+def _stop_service_now(service_id: str, service_config, reason: str = "manual_stop") -> dict:
+    """Stop service locally and optionally trigger Semaphore shutdown."""
+    service_state = _services.get(service_id, {})
+    current_state = service_state.get("state", "cold")
+    current_readiness = service_state.get("readiness", "not_ready")
+    is_starting = _request_queue.is_service_starting(service_id)
+
+    if current_state == "cold" and current_readiness == "not_ready" and not is_starting:
+        return {"already_stopped": True, "cancelled_requests": 0}
+
+    cancelled_requests = _request_queue.clear_queue(service_id)
+    _request_queue.mark_service_ready(service_id)
+    _set_service_cold(service_id, reason=reason)
+
+    logger.log_service_stop(
+        service_id,
+        reason=reason,
+        metadata={"cancelled_requests": cancelled_requests},
+    )
+    metrics.increment_counter("service_stops_total", service_id=service_id)
+
+    if getattr(service_config, "semaphore_enabled", False):
+        asyncio.create_task(_shutdown_service_with_semaphore(service_id, service_config))
+
+    return {"already_stopped": False, "cancelled_requests": cancelled_requests}
+
+
 @app.get("/{full_path:path}")
 def serve_react_app(full_path: str):
     # Security check to prevent directory traversal
@@ -1269,6 +1440,7 @@ def serve_react_app(full_path: str):
     return FileResponse(os.path.join(ui_dir, "index.html"))
 
 
+>>>>>>> Stashed changes
 def run() -> None:
     import uvicorn
 

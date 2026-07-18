@@ -34,7 +34,7 @@ services:
   # This is the default service and is always available
   ollama:
     # Base URL where the service is running
-    base_url: "http://localhost:11434"
+    base_url: "http://100.74.149.36:11434"
     # Optional: strategy-based routing
     # strategy: "model_router"         # choose strategy (e.g., model_router, load_balancer)
     # instances:
@@ -49,7 +49,7 @@ services:
     # Health check endpoint (optional)
     # If provided, Hestia will poll this URL to verify service readiness
     # If not provided, will use warmup_ms delay instead
-    health_url: "http://localhost:11434/api/tags"
+    health_url: "http://100.74.149.36:11434/api/tags"
     
     # Retry configuration
     retry_count: 3              # Number of retry attempts for failed requests
@@ -272,6 +272,24 @@ services:
     semaphore_stop_template_id: 21              # Graceful region shutdown
     semaphore_task_timeout: 180
     semaphore_poll_interval: 2.0
+
+  simple-fastapi:
+    base_url: "http://100.102.240.4:7123"
+    
+    retry_count: 2
+    retry_delay_ms: 5000
+    warmup_ms: 0               # Semaphore manages startup
+    idle_timeout_ms: 60000    # 1 minutes
+    queue_size: 10
+    request_timeout_seconds: 600  # 10 minutes for GPU service startup
+    
+    # Semaphore configuration for GPU server
+    semaphore_enabled: true
+    semaphore_machine_id: "homelab"
+    semaphore_start_template_id: 2            # GPU service startup template
+    semaphore_stop_template_id: 3             # GPU service shutdown template
+    semaphore_task_timeout: 60               # 1 minutes for startup
+    semaphore_poll_interval: 10.0              # Slower polling for heavy workloads
 
 # Configuration Tips:
 #

@@ -43,15 +43,6 @@ Purpose: Equip AI coding agents to be productive immediately in this repo. Keep 
 - `src/hestia/middleware.py` — logging + metrics wiring
 - `src/hestia/logging.py` — event helpers and SafeStreamHandler
 - `tests/integration/test_service_management.py` — service lifecycle tests
-- `specs/001-hestia-a-personal/quickstart.md` — curl examples and client setup
-
-## Spec-driven development
-- Specs live in `specs/`; start from `specs/001-hestia-a-personal/` and keep docs/tests in sync.
-- When adding features:
-  1) Draft/update spec in `specs/...`
-  2) Add/adjust tests (happy path + edge cases)
-  3) Implement minimal changes keeping public behavior stable
-  4) Update docs and examples
 
 ## Examples
 - Probe status when upstream is running:

@@ -14,9 +14,16 @@ def test_openapi_contract_routes_exist(client: TestClient):
     # These endpoint stubs must exist in the FastAPI app per contracts/openapi.yaml
     # 1) Transparent proxy under /services/{serviceId}/{proxyPath}
     # We can't call with path params directly here; just verify 404 vs 405 semantics once implemented
+<<<<<<< Updated upstream
+    # 2) Generic dispatcher /v1/requests
+    # 3) Service status /v1/services/{serviceId}/status
+    # 4) Proactive start /v1/services/{serviceId}/start
+=======
     # 2) Generic dispatcher /api/v1/requests
     # 3) Service status /api/v1/services/{serviceId}/status
     # 4) Proactive start /api/v1/services/{serviceId}/start
+    # 5) Proactive stop/restart + config management endpoints
+>>>>>>> Stashed changes
 
     # Expect 501 (stub) or 200 when implemented
     resp = client.post(
@@ -28,5 +35,14 @@ def test_openapi_contract_routes_exist(client: TestClient):
     resp = client.get("/api/v1/services/test-service/status")
     assert resp.status_code in {501, 200}
 
-    resp = client.post("/api/v1/services/test-service/start")
+    resp = client.post("/v1/services/test-service/start")
     assert resp.status_code in {501, 202, 409}
+
+    resp = client.post("/api/v1/services/test-service/stop")
+    assert resp.status_code in {501, 202, 409}
+
+    resp = client.post("/api/v1/services/test-service/restart")
+    assert resp.status_code in {501, 202, 409}
+
+    resp = client.get("/api/v1/config")
+    assert resp.status_code in {501, 200}
