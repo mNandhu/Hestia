@@ -1,0 +1,20 @@
+# Hestia service registry. Copy to hestia.yml (gitignored) and edit.
+# Never put secrets here: credentials come from the environment (see .env.example).
+#
+# Each service is reachable at  http://<hestia>:8080/services/<id>/<path>
+# and forwarded to              <upstream>/<path>
+
+services:
+  ollama:
+    upstream: http://ollama-host:11434   # base URL; path after /services/ollama is appended
+    health_path: /api/tags               # answers 2xx when ready (default "/")
+    timeouts:
+      connect_s: 10                      # open TCP connection (default 10)
+      read_s: 600                        # max gap between bytes; null = none (default 600)
+
+  # Phase 2 adds lifecycle (wake on request, sleep when idle), e.g.:
+  # simple-fastapi:
+  #   upstream: http://homelab:7123
+  #   health_path: /health
+  #   driver: semaphore
+  #   idle_timeout_s: 60

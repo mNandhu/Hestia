@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+*.egg-info/
+
+# Node (frontend, phase 4)
+node_modules/
+
+# Local config & secrets — hestia.example.yml is the committed template
+hestia.yml
+.env
+local-setup/
